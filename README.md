@@ -37,7 +37,18 @@ Edit the `.env` the installer created in the repo root:
 ```
 /teams channel "The nightly verify loop passed on staging" success
 /teams user:jordan@example.com "Wave 6 PDF export shipped" info
+/teams group:Team Stand-Up "Nightly build is green" success
 ```
+
+**Targets** (`--target`):
+
+| Target | Destination | Needs |
+|---|---|---|
+| `channel` | The team channel wired to the webhook | `TEAMS_WEBHOOK_URL` |
+| `user:<upn>` | A 1:1 direct message, sent as you | Graph app |
+| `chat:<id>` | An existing group or **meeting** chat, by its Graph chat id | Graph app |
+| `group:<topic>` | A group/meeting chat resolved by name (errors if ambiguous) | Graph app |
+| `list-chats` | Prints your group/meeting chats + ids for discovery (sends nothing) | Graph app |
 
 Direct CLI:
 ```bash
@@ -45,6 +56,11 @@ Direct CLI:
   --title "Build passed" --status success \
   --link "PR #142=https://github.com/example/repo/pull/142" \
   --fact "Skill=skill-creator" --fact "Duration=4m12s"
+
+# Group or meeting chat — by name, or by id from `--target list-chats`:
+.venv/bin/python src/teams_notify.py --target "group:Team Stand-Up" \
+  --title "Nightly build is green" --status success
+.venv/bin/python src/teams_notify.py --target list-chats   # discover chat ids/topics (sends nothing)
 
 # Pre-built card, from file or stdin:
 .venv/bin/python src/teams_notify.py --target user:sam@example.com --card-file report.json
@@ -54,5 +70,6 @@ your-generator | .venv/bin/python src/teams_notify.py --target channel --card-fi
 ## Notes
 
 - Legacy Teams "Incoming Webhook" connectors retire May 2026 — this uses **Workflows**, the sanctioned replacement.
-- DMs send **as you** (delegated). Channel posts appear from the **Flow bot** (a Microsoft platform constraint).
+- DMs and group/meeting-chat posts send **as you** (delegated, via the same Graph app). Channel posts appear from the **Flow bot** (a Microsoft platform constraint).
+- `chat:<id>` / `group:<topic>` post to any chat you're a member of — including recurring **meeting** chats (that's how "Daily Stand-Up"–style chats are reached). Use `--target list-chats` to find ids.
 - To scope `/teams` to a single repo instead of globally, copy `commands/teams.md` into that project's `.claude/commands/` and point it at the repo's `.venv`.

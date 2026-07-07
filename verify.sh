@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# verify.sh — sanity-check both delivery paths.
-#   bash verify.sh              reachability + token acquisition only (posts nothing)
-#   bash verify.sh --send       also POST a labeled test card to the channel (visible)
-#   bash verify.sh --dm <upn>   also send a labeled test DM to <upn> (visible to them)
+# verify.sh — sanity-check the delivery paths.
+#   bash verify.sh                reachability + token acquisition only (posts nothing)
+#   bash verify.sh --send         also POST a labeled test card to the channel (visible)
+#   bash verify.sh --dm <upn>     also send a labeled test DM to <upn> (visible to them)
+#   bash verify.sh --chat <t>     also post a labeled test to a group/meeting chat, where
+#                                 <t> is a chat id ('19:...@thread.v2') or a topic name
+#   bash verify.sh --list         list your group/meeting chats + ids (posts nothing) and exit
 set -uo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -10,11 +13,13 @@ ENV_FILE="$REPO_DIR/.env"
 VENV_PY="$REPO_DIR/.venv/bin/python"
 SCRIPT="$REPO_DIR/src/teams_notify.py"
 
-SEND=0; DM=""
+SEND=0; DM=""; CHAT=""; LIST=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --send) SEND=1; shift;;
         --dm) DM="${2:-}"; shift 2;;
+        --chat) CHAT="${2:-}"; shift 2;;
+        --list) LIST=1; shift;;
         *) echo "unknown argument: $1"; exit 2;;
     esac
 done
@@ -39,6 +44,12 @@ for k, v in dotenv_values(sys.argv[1]).items():
     print("%s=%s" % (k, "" if v is None else v))
 PY
     )
+fi
+
+# --list is a discovery shortcut: print chats and exit (sends nothing).
+if [ "$LIST" = "1" ]; then
+    [ -x "$VENV_PY" ] || { echo "venv python missing — run install.sh"; exit 1; }
+    exec "$VENV_PY" "$SCRIPT" --target list-chats
 fi
 
 echo "teams-notify verification  ($REPO_DIR)"
@@ -97,6 +108,25 @@ PY
         else
             no "test DM to $DM failed"
         fi
+    fi
+fi
+
+echo
+echo "[3] Group / meeting chat"
+if [ -z "$CHAT" ]; then
+    skip "no --chat target — group/meeting chat test not requested"
+else
+    case "$CHAT" in
+        chat:*|group:*) tgt="$CHAT";;
+        19:*|*@thread.*) tgt="chat:$CHAT";;
+        *)              tgt="group:$CHAT";;
+    esac
+    if "$VENV_PY" "$SCRIPT" --target "$tgt" --status info \
+        --title "teams-notify verification — safe to ignore" \
+        --text "Automated chat test from verify.sh." >/dev/null 2>&1; then
+        ok "test card posted to $tgt"
+    else
+        no "post to $tgt failed"
     fi
 fi
 

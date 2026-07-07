@@ -195,6 +195,43 @@ def _graph(method, path, token, **kwargs):
     return resp.json() if resp.text else {}
 
 
+def _post_card(token, chat_id, card):
+    """Post an Adaptive Card into an existing chat (1:1, group, or meeting)."""
+    _graph("POST", f"/chats/{chat_id}/messages", token, json={
+        "body": {"contentType": "html", "content": '<attachment id="1"></attachment>'},
+        "attachments": [
+            {"id": "1",
+             "contentType": "application/vnd.microsoft.card.adaptive",
+             "content": json.dumps(card)},  # Graph requires the card as a STRING
+        ],
+    })
+
+
+def _iter_chats(token):
+    """Yield every chat for the signed-in user, following @odata.nextLink paging."""
+    next_link = f"{GRAPH}/me/chats?$expand=members&$top=50"
+    while next_link:
+        resp = requests.get(next_link, headers={"Authorization": f"Bearer {token}"}, timeout=30)
+        if resp.status_code >= 300:
+            sys.exit(f"[error] Graph GET /me/chats -> {resp.status_code}: {resp.text[:400]}")
+        data = resp.json()
+        for chat in data.get("value", []):
+            yield chat
+        next_link = data.get("@odata.nextLink")
+
+
+def _resolve_chat_by_topic(token, topic):
+    """Return group/meeting chats whose topic contains `topic` (case-insensitive)."""
+    needle = topic.strip().lower()
+    hits = []
+    for chat in _iter_chats(token):
+        if chat.get("chatType") in ("group", "meeting"):
+            ctopic = (chat.get("topic") or "").strip()
+            if ctopic and needle in ctopic.lower():
+                hits.append(chat)
+    return hits
+
+
 def send_dm(card, upn):
     token = _graph_token()
     me = _graph("GET", "/me", token)["id"]
@@ -212,22 +249,53 @@ def send_dm(card, upn):
         ],
     })
 
-    _graph("POST", f"/chats/{chat['id']}/messages", token, json={
-        "body": {"contentType": "html", "content": '<attachment id="1"></attachment>'},
-        "attachments": [
-            {"id": "1",
-             "contentType": "application/vnd.microsoft.card.adaptive",
-             "content": json.dumps(card)},  # Graph requires the card as a STRING
-        ],
-    })
+    _post_card(token, chat["id"], card)
     print(f"[ok] sent DM to {upn}.")
+
+
+def send_chat(card, chat_id):
+    """Post to any existing chat (group/meeting/1:1) by its Graph chat id."""
+    token = _graph_token()
+    _post_card(token, chat_id, card)
+    print(f"[ok] posted to chat {chat_id}.")
+
+
+def send_group(card, topic):
+    """Resolve a group/meeting chat by topic name, then post to it."""
+    token = _graph_token()
+    hits = _resolve_chat_by_topic(token, topic)
+    if not hits:
+        sys.exit(f"[error] no group/meeting chat found with a topic matching '{topic}'. "
+                 f"Run --target list-chats to see available chats, or use --target chat:<id>.")
+    if len(hits) > 1:
+        listing = "\n".join(f"    chat:{c['id']}  ({c.get('topic')})" for c in hits)
+        sys.exit(f"[error] '{topic}' matched {len(hits)} chats — narrow it with --target chat:<id>:\n{listing}")
+    chat = hits[0]
+    _post_card(token, chat["id"], card)
+    print(f"[ok] posted to group chat '{chat.get('topic')}'.")
+
+
+def list_chats():
+    """Print the signed-in user's group/meeting chats (topic + chat id) for discovery."""
+    token = _graph_token()
+    rows = []
+    for chat in _iter_chats(token):
+        ct = chat.get("chatType")
+        if ct in ("group", "meeting"):
+            rows.append((ct, chat.get("topic") or "(no topic)", chat["id"]))
+    rows.sort(key=lambda r: (r[0], r[1].lower()))
+    for ct, topic, cid in rows:
+        print(f"[{ct}] {topic}")
+        print(f"    chat:{cid}")
+    print(f"\n{len(rows)} group/meeting chats.", file=sys.stderr)
 
 
 # --------------------------------------------------------------------------- #
 def main():
-    p = argparse.ArgumentParser(description="Post a message to Teams (channel or DM).")
+    p = argparse.ArgumentParser(description="Post a message to Teams (channel, DM, or group/meeting chat).")
     p.add_argument("--target", required=True,
-                   help="'channel' or 'user:<upn>' (e.g. user:jordan@example.com)")
+                   help="'channel', 'user:<upn>' (1:1 DM), 'chat:<id>' (group/meeting chat by id), "
+                        "'group:<topic>' (group/meeting chat by name), or 'list-chats' (discover ids)")
     p.add_argument("--card-file", dest="card_file",
                    help="Path to a pre-built Adaptive Card JSON, or '-' for stdin. "
                         "When set, build flags below are ignored.")
@@ -237,6 +305,11 @@ def main():
     p.add_argument("--link", action="append", help="Repeatable 'Label=https://url' (GitHub PRs/issues/files)")
     p.add_argument("--fact", action="append", help="Repeatable 'Key=value' fact rows")
     args = p.parse_args()
+
+    # Discovery target needs no card — list chats and exit.
+    if args.target == "list-chats":
+        list_chats()
+        return
 
     if args.card_file:
         if any([args.title, args.text, args.link, args.fact]) or args.status != "info":
@@ -255,8 +328,19 @@ def main():
         if not re.match(r"[^@]+@[^@]+\.[^@]+", upn):
             sys.exit(f"[error] '{upn}' does not look like a UPN/email.")
         send_dm(card, upn)
+    elif args.target.startswith("chat:"):
+        chat_id = args.target.split("chat:", 1)[1].strip()
+        if not chat_id:
+            sys.exit("[error] --target chat:<id> requires a chat id (see --target list-chats).")
+        send_chat(card, chat_id)
+    elif args.target.startswith("group:"):
+        topic = args.target.split("group:", 1)[1].strip()
+        if not topic:
+            sys.exit("[error] --target group:<topic> requires a topic (see --target list-chats).")
+        send_group(card, topic)
     else:
-        sys.exit("[error] --target must be 'channel' or 'user:<upn>'.")
+        sys.exit("[error] --target must be 'channel', 'user:<upn>', 'chat:<id>', "
+                 "'group:<topic>', or 'list-chats'.")
 
 
 if __name__ == "__main__":

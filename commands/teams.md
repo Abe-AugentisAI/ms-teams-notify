@@ -1,6 +1,6 @@
 ---
-description: Post a status/message with GitHub links to a Teams channel or a colleague's DM.
-argument-hint: <channel|user:upn> "<title>" [status] [notes...]
+description: Post a status/message with GitHub links to a Teams channel, a colleague's DM, or a group/meeting chat.
+argument-hint: <channel|user:upn|chat:id|group:topic> "<title>" [status] [notes...]
 allowed-tools: Bash(__VENV_PY__ __SCRIPT__:*)
 ---
 
@@ -10,8 +10,16 @@ You are posting a Microsoft Teams notification via the teams-notify tool.
 
 Steps:
 1. Parse the request into these fields:
-   - `--target`: `channel` for a team channel, or `user:<upn>` for a direct message
-     (e.g. `user:jordan@example.com`). Default to `channel` if unspecified.
+   - `--target`: pick the destination —
+     - `channel` — the team channel wired to the webhook. Default if unspecified.
+     - `user:<upn>` — a 1:1 direct message (e.g. `user:jordan@example.com`).
+     - `chat:<id>` — an existing group or meeting chat, addressed by its Graph chat id
+       (e.g. `chat:19:meeting_...@thread.v2`).
+     - `group:<topic>` — a group or meeting chat resolved by its name/topic
+       (e.g. `group:Team Stand-Up`). If the name matches more than one
+       chat, the tool lists the candidates and asks you to use `chat:<id>` instead.
+     - To discover the available chat ids and topics, run `__VENV_PY__ __SCRIPT__ --target list-chats`
+       (no message is sent) and pick the right `chat:<id>`.
    - `--title`: a **declarative, full-sentence** title (assertion-evidence style),
      e.g. "The nightly verify loop passed on staging" — not a topic fragment.
    - `--status`: one of `success | warn | fail | info`. Infer from context
