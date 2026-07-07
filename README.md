@@ -1,6 +1,6 @@
 # teams-notify
 
-Send rich Microsoft Teams messages — to a **channel** or a colleague's **DM** — from Claude Code via a `/teams` slash command. Carries status, ad-hoc text, GitHub links, structured facts, and full Adaptive Cards.
+Send rich Microsoft Teams messages — to a **channel**, a colleague's **DM**, or a **group/meeting chat** — from Claude Code via a `/teams` slash command. Carries status, ad-hoc text, GitHub links, structured facts, and full Adaptive Cards.
 
 ## One-line install
 
@@ -23,14 +23,14 @@ Edit the `.env` the installer created in the repo root:
 | Var | Used for | Where it comes from |
 |---|---|---|
 | `TEAMS_WEBHOOK_URL` | Channel posts | Teams channel → `•••` → **Workflows** → *"Post to a channel when a webhook request is received"* |
-| `GRAPH_TENANT_ID` | DMs | Entra → App registrations → your app → Directory (tenant) ID |
-| `GRAPH_CLIENT_ID` | DMs | Same app → Application (client) ID |
+| `GRAPH_TENANT_ID` | DMs & chats | Entra → App registrations → your app → Directory (tenant) ID |
+| `GRAPH_CLIENT_ID` | DMs & chats | Same app → Application (client) ID |
 
-**Entra app for DMs** (public client, no secret): New registration → Authentication → enable *Allow public client flows* → API permissions → delegated `Chat.ReadWrite`, `ChatMessage.Send`, `User.Read` → **Grant admin consent**. First DM triggers a one-time device-code login, then the token caches to `~/.config/teams-notify/token_cache.json`.
+**Entra app for DMs & group/meeting chats** (public client, no secret): New registration → Authentication → enable *Allow public client flows* → API permissions → delegated `Chat.ReadWrite`, `ChatMessage.Send`, `User.Read` → **Grant admin consent**. The first DM or chat post triggers a one-time device-code login, then the token caches to `~/.config/teams-notify/token_cache.json`.
 
-> Channel posts do not require the Graph app; DMs do not require the webhook. Configure only what you need.
+> Channel posts do not require the Graph app; DMs and chats do not require the webhook. Configure only what you need.
 
-**Fast path:** run `bash configure.sh` to populate `.env` in one command (press Enter to keep any existing value), then `bash verify.sh` to sanity-check both paths. By default `verify.sh` posts nothing — it checks webhook reachability and acquires a Graph token. Add `--send` to post a labeled test card, or `--dm <upn>` to test a direct message.
+**Fast path:** run `bash configure.sh` to populate `.env` in one command (press Enter to keep any existing value), then `bash verify.sh` to sanity-check the paths. By default `verify.sh` posts nothing — it checks webhook reachability and acquires a Graph token. Add `--send` (channel), `--dm <upn>` (direct message), or `--chat <id|topic>` (group/meeting chat) to post one labeled test card; `bash verify.sh --list` prints your group/meeting chat ids without sending anything.
 
 ## Usage
 
