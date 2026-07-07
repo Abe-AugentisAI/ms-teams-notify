@@ -67,6 +67,27 @@ Direct CLI:
 your-generator | .venv/bin/python src/teams_notify.py --target channel --card-file -
 ```
 
+## Nicknames (aliases)
+
+Give any target a short nickname, then use it anywhere a target goes — matching is case-, space-, and punctuation-insensitive (`StandUp`, `standup`, `stand-up` all work):
+
+```bash
+bash alias.sh add StandUp "Team Stand-Up"   # bare topic → resolves + pins chat:<id>
+bash alias.sh add sam user:sam@example.com            # or map to any full target
+bash alias.sh list                                        # show saved nicknames
+bash alias.sh rm StandUp
+```
+
+```
+/teams standup "Nightly build is green" success
+```
+```bash
+.venv/bin/python src/teams_notify.py --target standup --title "Nightly build is green" --status success
+.venv/bin/python src/teams_notify.py --target alias-list   # show saved nicknames
+```
+
+Aliases live in `~/.config/teams-notify/aliases.json` (user-level, not committed to the repo). `add` accepts a full target (`channel`, `user:<upn>`, `chat:<id>`, `group:<topic>`) or a bare chat topic, which it resolves once and pins as `chat:<id>`.
+
 ## Notes
 
 - Legacy Teams "Incoming Webhook" connectors retire May 2026 — this uses **Workflows**, the sanctioned replacement.

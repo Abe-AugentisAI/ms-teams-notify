@@ -18,6 +18,10 @@ Steps:
      - `group:<topic>` — a group or meeting chat resolved by its name/topic
        (e.g. `group:Team Stand-Up`). If the name matches more than one
        chat, the tool lists the candidates and asks you to use `chat:<id>` instead.
+     - a **nickname/alias** (e.g. `standup`) — a saved short form that expands to any of the
+       above. Pass it straight through as `--target <nickname>`; the tool resolves it
+       (case/space/punctuation-insensitive) from `~/.config/teams-notify/aliases.json`.
+       Run `__VENV_PY__ __SCRIPT__ --target alias-list` to see the saved nicknames.
      - To discover the available chat ids and topics, run `__VENV_PY__ __SCRIPT__ --target list-chats`
        (no message is sent) and pick the right `chat:<id>`.
    - `--title`: a **declarative, full-sentence** title (assertion-evidence style),

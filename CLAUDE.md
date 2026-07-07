@@ -22,6 +22,7 @@ There is no server and no build step. The entry point is a single Python script.
 | `install.sh` / `install.ps1` | Create `.venv`, install deps, generate the live `/teams` command, seed `.env`. |
 | `configure.sh` | Interactively populate `.env` (writes values **single-quoted**). |
 | `verify.sh` | Smoke-test the delivery paths. Posts nothing unless asked. |
+| `alias.sh` | Manage `/teams` target nicknames (`list` / `add` / `rm`). |
 | `.env.example` | Template copied to `.env` by the installer. |
 | `requirements.txt` | `requests`, `msal`, `python-dotenv`. |
 
@@ -36,9 +37,23 @@ There is no server and no build step. The entry point is a single Python script.
 - `group:<topic>` — resolve a group/meeting chat by topic (case-insensitive substring);
   errors and lists candidates if the name is ambiguous.
 - `list-chats` — print the user's group/meeting chats + ids; sends nothing.
+- `<nickname>` — a saved alias that expands to any of the above (see **Aliases** below).
+- `alias-list` — print saved aliases; sends nothing.
 
 Shared internals: `_post_card()` posts a card to a chat id; `_iter_chats()` pages
-`/me/chats`; `_resolve_chat_by_topic()` backs `group:`.
+`/me/chats`; `_resolve_chat_by_topic()` backs `group:`; `_resolve_alias()` / `_norm_alias()`
+back nicknames.
+
+## Aliases (nicknames)
+
+Short-form target names live in `~/.config/teams-notify/aliases.json` (user-level, **not
+committed** — keeps internal chat topics/ids out of git). Before dispatch,
+`teams_notify.py` expands a bareword target via `_resolve_alias()` (normalized by
+`_norm_alias()`, so case/space/punctuation don't matter); explicit forms
+(`channel`/`user:`/`chat:`/`group:`/`list-chats`) are never shadowed. `--target alias-list`
+prints them. `alias.sh` (`list`/`add`/`rm`) edits the JSON and reuses
+`_resolve_chat_by_topic()`, so `add <name> <topic>` pins the resolved `chat:<id>`. Alias
+values are always full targets.
 
 ## Configuration
 

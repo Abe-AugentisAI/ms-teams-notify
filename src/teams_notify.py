@@ -38,6 +38,7 @@ except ImportError:
 GRAPH = "https://graph.microsoft.com/v1.0"
 SCOPES = ["Chat.ReadWrite", "ChatMessage.Send", "User.Read"]
 CACHE_PATH = Path.home() / ".config" / "teams-notify" / "token_cache.json"
+ALIAS_PATH = Path.home() / ".config" / "teams-notify" / "aliases.json"
 
 STATUS = {
     "success": {"style": "good", "emoji": "\u2705", "label": "Success"},
@@ -291,11 +292,54 @@ def list_chats():
 
 
 # --------------------------------------------------------------------------- #
+# Target aliases (short-form nicknames) — ~/.config/teams-notify/aliases.json
+# --------------------------------------------------------------------------- #
+def _norm_alias(name):
+    """Normalize an alias key so case, spaces, dashes, and dots don't matter."""
+    return re.sub(r"[^a-z0-9]+", "", name.lower())
+
+
+def _load_aliases():
+    """Return the alias map {name: full-target}, or {} if none/unreadable."""
+    if ALIAS_PATH.exists():
+        try:
+            data = json.loads(ALIAS_PATH.read_text())
+            if isinstance(data, dict):
+                return data
+            print(f"[warn] {ALIAS_PATH} is not a JSON object; ignoring.", file=sys.stderr)
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"[warn] could not read aliases ({ALIAS_PATH}): {e}", file=sys.stderr)
+    return {}
+
+
+def _resolve_alias(target):
+    """Expand a short-form alias to its full target; unchanged if there's no match."""
+    aliases = _load_aliases()
+    if aliases:
+        lookup = {_norm_alias(k): v for k, v in aliases.items()}
+        hit = lookup.get(_norm_alias(target))
+        if hit:
+            return hit
+    return target
+
+
+def print_aliases():
+    """Print the saved aliases (used by --target alias-list)."""
+    aliases = _load_aliases()
+    if not aliases:
+        print(f"(no aliases yet — add one with alias.sh; stored at {ALIAS_PATH})")
+        return
+    width = max(len(k) for k in aliases)
+    for k in sorted(aliases, key=str.lower):
+        print(f"{k.ljust(width)}  ->  {aliases[k]}")
+
+
+# --------------------------------------------------------------------------- #
 def main():
     p = argparse.ArgumentParser(description="Post a message to Teams (channel, DM, or group/meeting chat).")
     p.add_argument("--target", required=True,
-                   help="'channel', 'user:<upn>' (1:1 DM), 'chat:<id>' (group/meeting chat by id), "
-                        "'group:<topic>' (group/meeting chat by name), or 'list-chats' (discover ids)")
+                   help="'channel', 'user:<upn>' (1:1 DM), 'chat:<id>' or 'group:<topic>' "
+                        "(group/meeting chat), a saved alias/nickname, 'alias-list', or 'list-chats'")
     p.add_argument("--card-file", dest="card_file",
                    help="Path to a pre-built Adaptive Card JSON, or '-' for stdin. "
                         "When set, build flags below are ignored.")
@@ -306,7 +350,15 @@ def main():
     p.add_argument("--fact", action="append", help="Repeatable 'Key=value' fact rows")
     args = p.parse_args()
 
-    # Discovery target needs no card — list chats and exit.
+    # Expand a short-form alias unless the target is already an explicit form.
+    if (args.target not in ("channel", "list-chats", "alias-list")
+            and not args.target.startswith(("user:", "chat:", "group:"))):
+        args.target = _resolve_alias(args.target)
+
+    # Info targets need no card.
+    if args.target == "alias-list":
+        print_aliases()
+        return
     if args.target == "list-chats":
         list_chats()
         return
@@ -339,8 +391,8 @@ def main():
             sys.exit("[error] --target group:<topic> requires a topic (see --target list-chats).")
         send_group(card, topic)
     else:
-        sys.exit("[error] --target must be 'channel', 'user:<upn>', 'chat:<id>', "
-                 "'group:<topic>', or 'list-chats'.")
+        sys.exit(f"[error] unknown target '{args.target}'. Use channel | user:<upn> | chat:<id> | "
+                 f"group:<topic> | a saved alias (see --target alias-list) | list-chats.")
 
 
 if __name__ == "__main__":
