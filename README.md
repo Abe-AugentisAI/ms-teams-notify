@@ -30,6 +30,8 @@ Edit the `.env` the installer created in the repo root:
 
 > Channel posts do not require the Graph app; DMs do not require the webhook. Configure only what you need.
 
+**Fast path:** run `bash configure.sh` to populate `.env` in one command (press Enter to keep any existing value), then `bash verify.sh` to sanity-check both paths. By default `verify.sh` posts nothing — it checks webhook reachability and acquires a Graph token. Add `--send` to post a labeled test card, or `--dm <upn>` to test a direct message.
+
 ## Usage
 
 ```
