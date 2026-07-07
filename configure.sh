@@ -24,12 +24,16 @@ WEBHOOK="$(ask TEAMS_WEBHOOK_URL 'Teams Workflows webhook URL')"
 TENANT="$(ask GRAPH_TENANT_ID  'Entra tenant (Directory) ID')"
 CLIENT="$(ask GRAPH_CLIENT_ID   'Entra application (client) ID')"
 
+# Single-quote each value so bash-sourcing (e.g. verify.sh) survives '&' and other
+# shell metacharacters common in webhook URLs; python-dotenv strips the quotes the
+# same way. Webhook URLs and GUIDs never contain a single quote, so no further
+# escaping is needed.
 umask 077
 cat > "$ENV_FILE" <<EOF
 # Populated by configure.sh — teams_notify.py auto-loads this file.
-TEAMS_WEBHOOK_URL=$WEBHOOK
-GRAPH_TENANT_ID=$TENANT
-GRAPH_CLIENT_ID=$CLIENT
+TEAMS_WEBHOOK_URL='$WEBHOOK'
+GRAPH_TENANT_ID='$TENANT'
+GRAPH_CLIENT_ID='$CLIENT'
 EOF
 chmod 600 "$ENV_FILE"
 

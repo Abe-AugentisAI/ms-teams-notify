@@ -25,7 +25,21 @@ ok()   { echo "  ${G}PASS${N} $1"; pass=$((pass+1)); }
 no()   { echo "  ${R}FAIL${N} $1"; fail=$((fail+1)); }
 skip() { echo "  ${Y}SKIP${N} $1"; }
 
-[ -f "$ENV_FILE" ] && { set -a; . "$ENV_FILE"; set +a; }
+# Load .env through the same parser teams_notify.py uses (python-dotenv), NOT bash
+# `source` — so values containing '&' or other shell metacharacters are read
+# identically and can never disagree with the dispatcher. Falls back to loading
+# nothing if the venv is missing (the toolchain check below reports that).
+if [ -f "$ENV_FILE" ] && [ -x "$VENV_PY" ]; then
+    while IFS= read -r line; do
+        [ -n "$line" ] && export "$line"
+    done < <("$VENV_PY" - "$ENV_FILE" <<'PY'
+import sys
+from dotenv import dotenv_values
+for k, v in dotenv_values(sys.argv[1]).items():
+    print("%s=%s" % (k, "" if v is None else v))
+PY
+    )
+fi
 
 echo "teams-notify verification  ($REPO_DIR)"
 echo
