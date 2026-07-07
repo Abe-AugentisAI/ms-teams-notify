@@ -6,12 +6,12 @@ Send rich Microsoft Teams messages — to a **channel**, a colleague's **DM**, o
 
 **Linux / WSL / macOS**
 ```bash
-git clone <your-remote> ~/teams-notify && bash ~/teams-notify/install.sh
+git clone git@github.com:Abe-AugentisAI/ms-teams-notify.git ~/teams-notify && bash ~/teams-notify/install.sh
 ```
 
 **Windows (PowerShell)**
 ```powershell
-git clone <your-remote> $HOME\teams-notify; & $HOME\teams-notify\install.ps1
+git clone git@github.com:Abe-AugentisAI/ms-teams-notify.git $HOME\teams-notify; & $HOME\teams-notify\install.ps1
 ```
 
 The installer creates an isolated `.venv`, installs dependencies, and drops a path-resolved `/teams` command into `~/.claude/commands/`. Requires `git` and Python 3.
