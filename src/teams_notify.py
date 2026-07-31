@@ -41,6 +41,12 @@ SCOPES = ["Chat.ReadWrite", "ChatMessage.Send", "User.Read"]
 CACHE_PATH = Path.home() / ".config" / "teams-notify" / "token_cache.json"
 ALIAS_PATH = Path.home() / ".config" / "teams-notify" / "aliases.json"
 
+# Set by --dry-run. Consulted at every point where something would leave this machine:
+# the webhook POST, the Graph message POST, and the oneOnOne chat creation. Resolution,
+# ambiguity checks and the self-DM guard all still run, so a dry run answers "who would
+# this reach, and what exactly would they see" without reaching anyone.
+DRY_RUN = False
+
 STATUS = {
     "success": {"style": "good", "emoji": "\u2705", "label": "Success"},
     "warn":    {"style": "warning", "emoji": "\u26a0\ufe0f", "label": "Warning"},
@@ -125,6 +131,79 @@ def build_card(args):
 
 
 # --------------------------------------------------------------------------- #
+# Dry run — resolve and preview without anything leaving the machine
+# --------------------------------------------------------------------------- #
+def _ok(message):
+    """Report what happened — or, under --dry-run, what would have."""
+    print(f"[dry-run] would have {message}." if DRY_RUN else f"[ok] {message}.")
+
+
+def _walk_card(node, out):
+    """Collect readable text from ANY card shape.
+
+    --card-file accepts arbitrary JSON, so this cannot assume the structure build_card
+    emits. A preview that crashes, or silently prints nothing, is worse than no preview:
+    the operator approves a send having been shown an empty box.
+    """
+    if isinstance(node, dict):
+        if node.get("text"):
+            out.append(str(node["text"]))
+        for fact in node.get("facts") or []:
+            if isinstance(fact, dict):
+                out.append(f"{fact.get('title')} {fact.get('value')}")
+        for action in node.get("actions") or []:
+            if isinstance(action, dict):
+                out.append(f"link: {action.get('title')} -> {action.get('url')}")
+        for key in ("body", "items", "columns"):
+            _walk_card(node.get(key), out)
+    elif isinstance(node, list):
+        for child in node:
+            _walk_card(child, out)
+    elif isinstance(node, str) and node.strip():
+        out.append(node)
+
+
+def _preview(card, destination):
+    """Print the resolved destination and the exact card. Sends nothing."""
+    print(f"[dry-run] destination: {destination}")
+    lines = []
+    _walk_card(card, lines)
+    if not lines:
+        # Unrecognised shape — show the raw card rather than an empty preview.
+        lines = ["(card shape not recognised — raw JSON follows)"]
+        lines += json.dumps(card, indent=2)[:2000].splitlines()
+    for line in lines:
+        print(f"[dry-run]   {line}")
+
+
+def _describe_chat(token, chat_id):
+    """Name a chat id in human terms for a preview — topic and roster where readable.
+
+    A raw thread id is not an answer to "who does this reach": the docs promise the
+    preview shows that, and an alias pinned to the wrong chat is invisible otherwise.
+    Read-only, and fail-soft — an unreadable chat (48:notes is not a ChatThread) falls
+    back to the bare id rather than breaking the preview.
+    """
+    try:
+        resp = requests.get(f"{GRAPH}/chats/{chat_id}?$expand=members",
+                            headers={"Authorization": f"Bearer {token}"}, timeout=30)
+        if resp.status_code >= 300:
+            return f"chat {chat_id}"
+        data = resp.json()
+    except requests.RequestException:
+        return f"chat {chat_id}"
+    label = f"chat {chat_id}"
+    topic = (data.get("topic") or "").strip()
+    if topic:
+        label += f" — '{topic}'"
+    names = [m.get("displayName") for m in data.get("members") or [] if m.get("displayName")]
+    if names:
+        shown = ", ".join(names[:6]) + (f", +{len(names) - 6} more" if len(names) > 6 else "")
+        label += f" ({len(names)} members: {shown})"
+    return label
+
+
+# --------------------------------------------------------------------------- #
 # Channel path — Workflows webhook
 # --------------------------------------------------------------------------- #
 def send_channel(card):
@@ -138,10 +217,14 @@ def send_channel(card):
             {"contentType": "application/vnd.microsoft.card.adaptive", "content": card}
         ],
     }
+    if DRY_RUN:
+        _preview(card, "the webhook channel")
+        _ok("posted to channel")
+        return
     resp = requests.post(url, json=payload, timeout=30)
     if resp.status_code >= 300:
         sys.exit(f"[error] webhook POST failed ({resp.status_code}): {resp.text[:400]}")
-    print("[ok] posted to channel.")
+    _ok("posted to channel")
 
 
 # --------------------------------------------------------------------------- #
@@ -279,6 +362,10 @@ def _post_card(token, chat_id, card, mention_members=None):
     }
     if mentions:
         payload["mentions"] = mentions
+    if DRY_RUN:
+        who = ", ".join(m.get("displayName") or m.get("email") for m in mention_members or [])
+        _preview(card, _describe_chat(token, chat_id) + (f", @-mentioning {who}" if who else ""))
+        return
     _graph("POST", f"/chats/{chat_id}/messages", token, json=payload)
 
 
@@ -417,6 +504,17 @@ def send_dm(card, user_ref, label=None):
         sys.exit("[error] you cannot DM yourself — Teams has no 1:1 chat with one member. "
                  "Post to your own notes with --target chat:48:notes.")
 
+    # Computed once and used by both branches, so the preview and the real report can
+    # never describe different recipients.
+    bound = "" if user_ref == (label or user_ref) else f" (bound {user_ref})"
+
+    # Gate before /chats too, not just before the message: creating the chat is itself a
+    # write, and for someone you have never DMed it would leave a new empty conversation.
+    if DRY_RUN:
+        _preview(card, f"1:1 DM -> {label or user_ref}{bound}")
+        _ok(f"sent DM to {label or user_ref}{bound}")
+        return
+
     # oneOnOne chat creation is idempotent: returns the existing chat if present.
     chat = _graph("POST", "/chats", token, json={
         "chatType": "oneOnOne",
@@ -431,10 +529,9 @@ def send_dm(card, user_ref, label=None):
     })
 
     _post_card(token, chat["id"], card)
-    # Name the key actually bound, not just the address displayed — for a name-resolved
-    # DM those differ, and the bound id is what decided who received this.
-    bound = "" if user_ref == (label or user_ref) else f" (bound {user_ref})"
-    print(f"[ok] sent DM to {label or user_ref}{bound}.")
+    # `bound` names the key actually used, not just the address displayed — for a
+    # name-resolved DM those differ, and the bound id is what decided who received this.
+    _ok(f"sent DM to {label or user_ref}{bound}")
 
 
 def send_chat(card, chat_id, mention=None):
@@ -443,7 +540,7 @@ def send_chat(card, chat_id, mention=None):
     members = resolve_mentions(token, chat_id, mention) if mention else None
     _post_card(token, chat_id, card, members)
     who = f" (@{', @'.join(m.get('displayName') for m in members)})" if members else ""
-    print(f"[ok] posted to chat {chat_id}{who}.")
+    _ok(f"posted to chat {chat_id}{who}")
 
 
 def send_group(card, topic, mention=None):
@@ -459,7 +556,7 @@ def send_group(card, topic, mention=None):
     chat = hits[0]
     members = resolve_mentions(token, chat["id"], mention) if mention else None
     _post_card(token, chat["id"], card, members)
-    print(f"[ok] posted to group chat '{chat.get('topic')}'.")
+    _ok(f"posted to group chat '{chat.get('topic')}'")
 
 
 def list_chats():
@@ -535,11 +632,18 @@ def main():
     p.add_argument("--text", default="", help="Optional body text")
     p.add_argument("--link", action="append", help="Repeatable 'Label=https://url' (GitHub PRs/issues/files)")
     p.add_argument("--fact", action="append", help="Repeatable 'Key=value' fact rows")
+    p.add_argument("--dry-run", action="store_true",
+                   help="Resolve the target and print the exact card, then stop. Nothing "
+                        "is sent and no chat is created. Use this to check who a target "
+                        "reaches before committing to an unsendable message.")
     p.add_argument("--mention", action="append",
                    help="Repeatable. @-mention a chat member by display name, email, or "
                         "first name (e.g. --mention Taylor). chat:/group: targets only; the "
                         "person must already be in the chat.")
     args = p.parse_args()
+
+    global DRY_RUN
+    DRY_RUN = DRY_RUN or args.dry_run  # one-way: an embedder that armed it stays armed
 
     # Expand a short-form alias unless the target is already an explicit form.
     if (args.target not in ("channel", "list-chats", "list-people", "alias-list")

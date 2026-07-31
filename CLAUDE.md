@@ -40,6 +40,12 @@ There is no server and no build step. The entry point is a single Python script.
 - `group:<topic>` — resolve a group/meeting chat by topic (case-insensitive substring);
   errors and lists candidates if the name is ambiguous.
 - `list-chats` — print the user's group/meeting chats + ids; sends nothing.
+- `--dry-run` — any target, fully resolved, card printed, **nothing sent and no chat
+  created**. Gated at the three write points (`send_channel`'s webhook POST, `_post_card`'s
+  Graph POST, and `send_dm`'s `POST /chats`) via the module-level `DRY_RUN` flag, so a new
+  send path cannot bypass it as long as it goes through those. Guards still fire, because
+  they are resolution. This is the only safe way to answer "who would this reach" — the
+  tool has no confirmation step, and a sent message cannot be deleted via Graph.
 - `list-people` — print people + the `user:` target that reaches each (address where known,
   display name otherwise); members Graph exposes with neither are flagged as not
   addressable. Sends nothing.

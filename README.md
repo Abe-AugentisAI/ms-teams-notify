@@ -102,6 +102,12 @@ Aliases live in `~/.config/teams-notify/aliases.json` (user-level, not committed
 - Legacy Teams "Incoming Webhook" connectors retire May 2026 — this uses **Workflows**, the sanctioned replacement.
 - DMs and group/meeting-chat posts send **as you** (delegated, via the same Graph app). Channel posts appear from the **Flow bot** (a Microsoft platform constraint).
 - `chat:<id>` / `group:<topic>` post to any chat you're a member of — including recurring **meeting** chats (that's how "Daily Stand-Up"–style chats are reached). Use `--target list-chats` to find ids.
+- **`--dry-run` is the only safe way to check a target.** Any `--target` with a `--title`
+  sends immediately — there is no confirmation step. `--dry-run` runs the whole resolution
+  path (alias expansion, name matching, ambiguity and self-DM guards, mention resolution)
+  and prints the exact card, but nothing leaves the machine and no chat is created. Never
+  run a real send to see who it would reach; a sent message cannot be deleted through the
+  Graph API, only by hand in Teams.
 - **`--mention` is the only way to actually notify someone.** A Teams @-mention needs both
   an `<at id="N">` tag in the message body *and* a matching entry in the Graph `mentions`
   array carrying the person's AAD object id — plain "@Name" text pings nobody. So an

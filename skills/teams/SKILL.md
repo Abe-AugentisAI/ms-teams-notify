@@ -21,9 +21,11 @@ delete: a wrong message can only be removed by hand in the Teams UI. Therefore:
 
 - **Never infer a target.** There is no default destination. If the user did not name one,
   ask. Do not fall back to `channel`.
-- **Show the assembled command and wait for confirmation** before the first send of a
-  conversation — unless the user's instruction already names both the destination and the
-  message plainly enough that restating it adds nothing.
+- **Preview with `--dry-run`, then confirm.** Adding `--dry-run` resolves the target and
+  prints the exact card without sending anything or creating a chat. Use it to show the
+  user precisely who this reaches and what they will see, then re-run the identical command
+  without the flag once they agree. Never run a send command to "check that it resolves" —
+  there is no other way to inspect a target, and the message posts.
 - **Never guess between candidates.** Ambiguous names are a hard error by design; relay the
   candidates and ask which was meant.
 - The discovery targets below send nothing and need no confirmation — prefer them when the
@@ -43,6 +45,7 @@ You cannot DM yourself: Graph has no 1:1 chat with a single member. Your own not
 teams --target list-people    # who is addressable, with the user: target that reaches each
 teams --target list-chats     # group/meeting chats + their chat: ids
 teams --target alias-list     # saved nicknames
+teams --dry-run --target <t> --title "..."   # resolve + preview the card; sends nothing
 ```
 
 ## Targets
@@ -97,6 +100,6 @@ teams --target sam \
 
 ## Reporting back
 
-Relay the tool's `[ok]` / `[error]` line verbatim — never paraphrase a failure into a
-success. If a first run triggers a device-code login, surface the sign-in URL and code to
+Relay the tool's `[ok]` / `[dry-run]` / `[error]` line verbatim — never paraphrase a
+failure into a success, and never report a `[dry-run]` preview as though it were sent. If a first run triggers a device-code login, surface the sign-in URL and code to
 the user; that login is interactive and cannot be completed non-interactively.

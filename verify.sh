@@ -160,5 +160,20 @@ else
 fi
 
 echo
+echo "[5] Targeting regression tests (offline, sends nothing)"
+if [ -x "$VENV_PY" ] && [ -f "$REPO_DIR/tests/test_targeting.py" ]; then
+    if out="$("$VENV_PY" "$REPO_DIR/tests/test_targeting.py" 2>&1)"; then
+        ok "$(echo "$out" | tail -1)"
+    else
+        no "targeting tests FAILED"
+        # Keep both the [FAIL] label lines and the 'got X, want Y' detail lines —
+        # the values are the part that makes a targeting regression diagnosable.
+        echo "$out" | grep -E '\[FAIL\]|got .*want' | head -10
+    fi
+else
+    skip "tests/test_targeting.py not present"
+fi
+
+echo
 echo "Summary: ${G}${pass} passed${N}, ${R}${fail} failed${N}."
 [ "$fail" -eq 0 ]
