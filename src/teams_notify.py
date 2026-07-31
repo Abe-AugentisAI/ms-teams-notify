@@ -405,7 +405,17 @@ def list_people():
 def send_dm(card, user_ref, label=None):
     """DM a user by UPN/email or AAD object id — both are valid in a user@odata.bind."""
     token = _graph_token()
-    me = _graph("GET", "/me", token)["id"]
+    me = _graph("GET", "/me", token)
+    my_id = me["id"]
+
+    # Graph has no oneOnOne chat with a single member, so DMing yourself comes back as a
+    # raw "Duplicate chat members" 400. The self-chat is a different chat type, not a
+    # two-member chat. Name the working form rather than silently retargeting — a send
+    # cannot be undone, and every other guard here refuses instead of guessing.
+    if user_ref.lower() in {v.lower() for v in
+                            (my_id, me.get("mail"), me.get("userPrincipalName")) if v}:
+        sys.exit("[error] you cannot DM yourself — Teams has no 1:1 chat with one member. "
+                 "Post to your own notes with --target chat:48:notes.")
 
     # oneOnOne chat creation is idempotent: returns the existing chat if present.
     chat = _graph("POST", "/chats", token, json={
@@ -413,7 +423,7 @@ def send_dm(card, user_ref, label=None):
         "members": [
             {"@odata.type": "#microsoft.graph.aadUserConversationMember",
              "roles": ["owner"],
-             "user@odata.bind": f"{GRAPH}/users('{me}')"},
+             "user@odata.bind": f"{GRAPH}/users('{my_id}')"},
             {"@odata.type": "#microsoft.graph.aadUserConversationMember",
              "roles": ["owner"],
              "user@odata.bind": f"{GRAPH}/users('{user_ref}')"},
@@ -421,7 +431,10 @@ def send_dm(card, user_ref, label=None):
     })
 
     _post_card(token, chat["id"], card)
-    print(f"[ok] sent DM to {label or user_ref}.")
+    # Name the key actually bound, not just the address displayed — for a name-resolved
+    # DM those differ, and the bound id is what decided who received this.
+    bound = "" if user_ref == (label or user_ref) else f" (bound {user_ref})"
+    print(f"[ok] sent DM to {label or user_ref}{bound}.")
 
 
 def send_chat(card, chat_id, mention=None):

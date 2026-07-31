@@ -4,8 +4,9 @@ description: Use when the user wants to send, post, or share something on Micros
 user-invocable: true
 argument-hint: <channel|user:upn|user:name|chat:id|group:topic|nickname> "<title>" [status] [notes...]
 allowed-tools:
-  - Bash(teams *)
-  - Bash(teams:*)
+  - Bash(teams --target list-people)
+  - Bash(teams --target list-chats)
+  - Bash(teams --target alias-list)
 ---
 
 Post a rich Adaptive Card to Microsoft Teams — a channel, a colleague's DM, or a
@@ -27,6 +28,14 @@ delete: a wrong message can only be removed by hand in the Teams UI. Therefore:
   candidates and ask which was meant.
 - The discovery targets below send nothing and need no confirmation — prefer them when the
   user is only asking *who* or *where*, not asking to post.
+
+Only the three discovery commands are pre-approved in `allowed-tools`; every send raises a
+real permission prompt. That is deliberate — it is the one machine-enforced checkpoint in
+front of an irreversible message, and it still applies in contexts that never read this
+file. Do not work around it.
+
+You cannot DM yourself: Graph has no 1:1 chat with a single member. Your own notes are
+`--target chat:48:notes` (it accepts a card but not a `--mention`).
 
 ## Discovery (sends nothing)
 
