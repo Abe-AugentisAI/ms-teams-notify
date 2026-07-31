@@ -42,7 +42,18 @@ There is no server and no build step. The entry point is a single Python script.
 
 Shared internals: `_post_card()` posts a card to a chat id; `_iter_chats()` pages
 `/me/chats`; `_resolve_chat_by_topic()` backs `group:`; `_resolve_alias()` / `_norm_alias()`
-back nicknames.
+back nicknames; `resolve_mentions()` backs `--mention`.
+
+**`--mention` (chat/group only).** A Teams @-mention notifies someone only when the message
+carries BOTH an `<at id="N">` tag in the HTML body AND a matching entry in the Graph
+`mentions` array with the person's AAD object id — plain "@Name" text pings nobody. So
+`resolve_mentions()` maps each requested name against the target chat's members and treats
+an unresolvable name as a hard error that prints the roster, never a silent no-op;
+`_post_card()` then builds the prefix and the array together. `main()` rejects `--mention`
+on any target that is not `chat:`/`group:` (checked once after alias expansion, so an alias
+expanding to `user:`/`channel` is caught too) — a 1:1 DM has only two members, so
+`resolve_mentions()` would hard-exit on any third party anyway. The body prefix is
+`html.escape()`d because the body is `contentType: html`; `mentionText` stays plain.
 
 ## Aliases (nicknames)
 

@@ -32,6 +32,13 @@ Steps:
    - `--fact "Key=value"`: repeatable. Add useful context (skill name, duration, env).
    - `--link "Label=https://..."`: repeatable. Include any GitHub PRs, issues, or files
      relevant to the message. If the user referenced a PR/issue/commit, build the URL.
+   - `--mention "<name>"`: repeatable. Genuinely @-mention someone so Teams notifies them.
+     **`chat:`/`group:` targets only** — rejected with an error on `channel` and on 1:1
+     DMs (a DM already notifies its recipient). The person must already be a member of
+     that chat; matching accepts display name, email, or first name. An unresolvable name
+     is a hard error that prints the chat roster and sends nothing. Use this whenever the
+     user asks to ping/notify/tag someone — writing "@Name" into `--text` renders as
+     plain text and notifies **nobody**.
 
 2. If this message is reporting on a skill or task that just ran in this session,
    summarize its outcome into `--title`/`--text`/`--fact` before sending.

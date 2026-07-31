@@ -57,6 +57,10 @@ Direct CLI:
   --link "PR #142=https://github.com/example/repo/pull/142" \
   --fact "Skill=skill-creator" --fact "Duration=4m12s"
 
+# @-mention real people in a group/meeting chat so Teams actually notifies them:
+.venv/bin/python src/teams_notify.py --target "group:Team Stand-Up" \
+  --title "Nightly build is green" --status success --mention Taylor --mention chris@example.com
+
 # Group or meeting chat — by name, or by id from `--target list-chats`:
 .venv/bin/python src/teams_notify.py --target "group:Team Stand-Up" \
   --title "Nightly build is green" --status success
@@ -93,4 +97,10 @@ Aliases live in `~/.config/teams-notify/aliases.json` (user-level, not committed
 - Legacy Teams "Incoming Webhook" connectors retire May 2026 — this uses **Workflows**, the sanctioned replacement.
 - DMs and group/meeting-chat posts send **as you** (delegated, via the same Graph app). Channel posts appear from the **Flow bot** (a Microsoft platform constraint).
 - `chat:<id>` / `group:<topic>` post to any chat you're a member of — including recurring **meeting** chats (that's how "Daily Stand-Up"–style chats are reached). Use `--target list-chats` to find ids.
+- **`--mention` is the only way to actually notify someone.** A Teams @-mention needs both
+  an `<at id="N">` tag in the message body *and* a matching entry in the Graph `mentions`
+  array carrying the person's AAD object id — plain "@Name" text pings nobody. So an
+  unresolvable name is a hard error that lists the chat roster rather than a silent no-op.
+  It works on `chat:`/`group:` targets only (including an alias that expands to one) and is
+  rejected on `channel` and on 1:1 DMs; the person must already be in the chat.
 - To scope `/teams` to a single repo instead of globally, copy `commands/teams.md` into that project's `.claude/commands/` and point it at the repo's `.venv`.

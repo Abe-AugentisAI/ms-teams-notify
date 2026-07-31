@@ -20,6 +20,7 @@ Examples:
   teams_notify.py --target user:jordan@example.com --card-file run_summary.json
 """
 import argparse
+import html
 import json
 import os
 import re
@@ -196,16 +197,80 @@ def _graph(method, path, token, **kwargs):
     return resp.json() if resp.text else {}
 
 
-def _post_card(token, chat_id, card):
-    """Post an Adaptive Card into an existing chat (1:1, group, or meeting)."""
-    _graph("POST", f"/chats/{chat_id}/messages", token, json={
-        "body": {"contentType": "html", "content": '<attachment id="1"></attachment>'},
+def resolve_mentions(token, chat_id, wanted):
+    """Map each requested name/email to a real member of `chat_id`.
+
+    A Teams @-mention only notifies someone when the message carries BOTH an
+    <at id="N"> tag in the HTML body AND a matching entry in the `mentions`
+    array with the person's AAD object id. Plain "@Name" text pings nobody, so
+    an unresolvable name is a hard error rather than a silent no-op.
+    """
+    chat = _graph("GET", f"/chats/{chat_id}?$expand=members", token)
+    members = [m for m in chat.get("members", []) if m.get("userId")]
+    resolved, unknown = [], []
+    for want in wanted:
+        needle = want.strip().lstrip("@").lower()
+        if not needle:
+            unknown.append(want)
+            continue
+        hit = next(
+            (m for m in members
+             if needle == (m.get("displayName") or "").lower()
+             or needle == (m.get("email") or "").lower()
+             or needle == (m.get("email") or "").split("@")[0].lower()
+             or needle in (m.get("displayName") or "").lower().split()),
+            None,
+        )
+        if hit:
+            resolved.append(hit)
+        else:
+            unknown.append(want)
+    if unknown:
+        roster = "\n".join(
+            f"    {m.get('displayName')}  <{m.get('email') or 'no-email'}>" for m in members
+        )
+        sys.exit(
+            f"[error] cannot @-mention {unknown} — not a member of this chat.\n"
+            f"  A mention that does not resolve would post as plain text and notify nobody.\n"
+            f"  Chat members:\n{roster}"
+        )
+    return resolved
+
+
+def _post_card(token, chat_id, card, mention_members=None):
+    """Post an Adaptive Card into an existing chat (1:1, group, or meeting).
+
+    When `mention_members` is given, prepend real @-mentions to the message body
+    so the named people are actually notified.
+    """
+    prefix, mentions = "", []
+    for idx, m in enumerate(mention_members or []):
+        name = m.get("displayName") or m.get("email")
+        # The body is contentType html, so a name containing & or <> must be escaped.
+        # mentionText below stays plain — Graph treats it as text, not markup.
+        prefix += f'<at id="{idx}">{html.escape(name)}</at> '
+        mentions.append({
+            "id": idx,
+            "mentionText": name,
+            "mentioned": {"user": {
+                "id": m["userId"],
+                "displayName": name,
+                "userIdentityType": "aadUser",
+            }},
+        })
+
+    payload = {
+        "body": {"contentType": "html",
+                 "content": f'{prefix}<attachment id="1"></attachment>'},
         "attachments": [
             {"id": "1",
              "contentType": "application/vnd.microsoft.card.adaptive",
              "content": json.dumps(card)},  # Graph requires the card as a STRING
         ],
-    })
+    }
+    if mentions:
+        payload["mentions"] = mentions
+    _graph("POST", f"/chats/{chat_id}/messages", token, json=payload)
 
 
 def _iter_chats(token):
@@ -254,14 +319,16 @@ def send_dm(card, upn):
     print(f"[ok] sent DM to {upn}.")
 
 
-def send_chat(card, chat_id):
+def send_chat(card, chat_id, mention=None):
     """Post to any existing chat (group/meeting/1:1) by its Graph chat id."""
     token = _graph_token()
-    _post_card(token, chat_id, card)
-    print(f"[ok] posted to chat {chat_id}.")
+    members = resolve_mentions(token, chat_id, mention) if mention else None
+    _post_card(token, chat_id, card, members)
+    who = f" (@{', @'.join(m.get('displayName') for m in members)})" if members else ""
+    print(f"[ok] posted to chat {chat_id}{who}.")
 
 
-def send_group(card, topic):
+def send_group(card, topic, mention=None):
     """Resolve a group/meeting chat by topic name, then post to it."""
     token = _graph_token()
     hits = _resolve_chat_by_topic(token, topic)
@@ -272,7 +339,8 @@ def send_group(card, topic):
         listing = "\n".join(f"    chat:{c['id']}  ({c.get('topic')})" for c in hits)
         sys.exit(f"[error] '{topic}' matched {len(hits)} chats — narrow it with --target chat:<id>:\n{listing}")
     chat = hits[0]
-    _post_card(token, chat["id"], card)
+    members = resolve_mentions(token, chat["id"], mention) if mention else None
+    _post_card(token, chat["id"], card, members)
     print(f"[ok] posted to group chat '{chat.get('topic')}'.")
 
 
@@ -348,12 +416,24 @@ def main():
     p.add_argument("--text", default="", help="Optional body text")
     p.add_argument("--link", action="append", help="Repeatable 'Label=https://url' (GitHub PRs/issues/files)")
     p.add_argument("--fact", action="append", help="Repeatable 'Key=value' fact rows")
+    p.add_argument("--mention", action="append",
+                   help="Repeatable. @-mention a chat member by display name, email, or "
+                        "first name (e.g. --mention Taylor). chat:/group: targets only; the "
+                        "person must already be in the chat.")
     args = p.parse_args()
 
     # Expand a short-form alias unless the target is already an explicit form.
     if (args.target not in ("channel", "list-chats", "alias-list")
             and not args.target.startswith(("user:", "chat:", "group:"))):
         args.target = _resolve_alias(args.target)
+
+    # --mention only means something on a chat that has other members. Guard once, here,
+    # after alias expansion, so an alias that expands to user:/channel is caught too rather
+    # than accepting the flag and silently dropping it.
+    if args.mention and not args.target.startswith(("chat:", "group:")):
+        sys.exit("[error] --mention works only on chat:/group: targets (including an alias "
+                 "that expands to one). A 1:1 DM already notifies its recipient and has no "
+                 "other members to mention; the channel webhook cannot carry mention entities.")
 
     # Info targets need no card.
     if args.target == "alias-list":
@@ -384,12 +464,12 @@ def main():
         chat_id = args.target.split("chat:", 1)[1].strip()
         if not chat_id:
             sys.exit("[error] --target chat:<id> requires a chat id (see --target list-chats).")
-        send_chat(card, chat_id)
+        send_chat(card, chat_id, args.mention)
     elif args.target.startswith("group:"):
         topic = args.target.split("group:", 1)[1].strip()
         if not topic:
             sys.exit("[error] --target group:<topic> requires a topic (see --target list-chats).")
-        send_group(card, topic)
+        send_group(card, topic, args.mention)
     else:
         sys.exit(f"[error] unknown target '{args.target}'. Use channel | user:<upn> | chat:<id> | "
                  f"group:<topic> | a saved alias (see --target alias-list) | list-chats.")
