@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# teams — PATH-resolvable entry point for teams-notify.
+#
+# Resolves its own real location, following symlinks, so the venv and dispatcher
+# are found no matter where the repo is cloned or where this file is linked from.
+# That is what lets skills/teams/SKILL.md be SYMLINKED into ~/.claude/skills/
+# instead of rendered: with no machine-specific paths to substitute, the live
+# skill and the committed file are the same file, so they cannot drift.
+set -euo pipefail
+
+SELF="${BASH_SOURCE[0]}"
+while [ -L "$SELF" ]; do
+    LINK="$(readlink "$SELF")"
+    case "$LINK" in
+        /*) SELF="$LINK" ;;
+        *)  SELF="$(cd "$(dirname "$SELF")" && pwd)/$LINK" ;;
+    esac
+done
+REPO_DIR="$(cd "$(dirname "$SELF")/.." && pwd)"
+
+PY="$REPO_DIR/.venv/bin/python"
+SCRIPT="$REPO_DIR/src/teams_notify.py"
+[ -x "$PY" ]     || { echo "[error] venv missing at $PY — run: bash $REPO_DIR/install.sh" >&2; exit 1; }
+[ -f "$SCRIPT" ] || { echo "[error] dispatcher missing at $SCRIPT" >&2; exit 1; }
+
+exec "$PY" "$SCRIPT" "$@"

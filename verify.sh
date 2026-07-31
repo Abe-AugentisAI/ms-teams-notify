@@ -131,5 +131,34 @@ else
 fi
 
 echo
+echo "[4] Global skill install"
+# No render step to verify: the skill is a symlink, so 'in sync' is just 'points here'.
+SKILL_LINK="$HOME/.claude/skills/teams"
+if [ -L "$SKILL_LINK" ] && [ "$(readlink -f "$SKILL_LINK")" = "$REPO_DIR/skills/teams" ]; then
+    ok "skill symlinked to this repo (git pull is enough to update it)"
+elif [ -d "$SKILL_LINK" ]; then
+    ok "skill installed as a copy (Windows-style; re-run the installer after a pull)"
+else
+    no "skill not installed at $SKILL_LINK — run install.sh"
+fi
+[ -f "$SKILL_LINK/SKILL.md" ] && ok "SKILL.md reachable" || no "SKILL.md missing at $SKILL_LINK"
+if [ -e "$HOME/.claude/commands/teams.md" ]; then
+    no "obsolete ~/.claude/commands/teams.md still present — it shadows the skill; run install.sh"
+else
+    ok "no stale slash command shadowing the skill"
+fi
+if command -v teams >/dev/null 2>&1; then
+    ok "'teams' resolves on PATH ($(command -v teams))"
+else
+    no "'teams' not on PATH — run install.sh and check ~/.local/bin"
+fi
+# The skill must stay path-free, or it can no longer be symlinked.
+if grep -q '/home/\|__VENV_PY__\|__SCRIPT__' "$REPO_DIR/skills/teams/SKILL.md"; then
+    no "SKILL.md contains a machine-specific path — it must stay symlinkable"
+else
+    ok "SKILL.md is path-free"
+fi
+
+echo
 echo "Summary: ${G}${pass} passed${N}, ${R}${fail} failed${N}."
 [ "$fail" -eq 0 ]

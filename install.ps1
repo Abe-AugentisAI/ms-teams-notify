@@ -15,13 +15,31 @@ $VenvPy = "$RepoDir\.venv\Scripts\python.exe"
 & $VenvPy -m pip install --quiet --upgrade pip
 & $VenvPy -m pip install --quiet -r "$RepoDir\requirements.txt"
 
-Write-Host "==> Installing the /teams slash command"
-$CmdDir = "$HOME\.claude\commands"
-New-Item -ItemType Directory -Force -Path $CmdDir | Out-Null
-$Script = "$RepoDir\src\teams_notify.py"
-$tpl = Get-Content "$RepoDir\commands\teams.md" -Raw
-$tpl = $tpl.Replace('__VENV_PY__', $VenvPy).Replace('__SCRIPT__', $Script)
-Set-Content -Path "$CmdDir\teams.md" -Value $tpl -Encoding UTF8
+Write-Host "==> Installing the 'teams' command on PATH"
+$BinDir = "$HOME\.local\bin"
+New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
+# Windows has no usable equivalent of the bash wrapper's symlink resolution, so shim it.
+@"
+@echo off
+"$VenvPy" "$RepoDir\src\teams_notify.py" %*
+"@ | Set-Content -Path "$BinDir\teams.cmd" -Encoding ASCII
+if (($env:PATH -split ';') -notcontains $BinDir) {
+    Write-Host "    [warn] $BinDir is not on PATH — add it"
+}
+
+Write-Host "==> Installing the global /teams skill"
+# Copied rather than symlinked: symlinks need Developer Mode or admin on Windows. That
+# means a Windows clone must re-run this installer after 'git pull'; the POSIX install
+# symlinks instead and needs no reinstall.
+$SkillDir = "$HOME\.claude\skills\teams"
+New-Item -ItemType Directory -Force -Path $SkillDir | Out-Null
+Copy-Item "$RepoDir\skills\teams\SKILL.md" "$SkillDir\SKILL.md" -Force
+
+# Retire the pre-symlink slash command; two entries named 'teams' would shadow each other.
+if (Test-Path "$HOME\.claude\commands\teams.md") {
+    Remove-Item "$HOME\.claude\commands\teams.md" -Force
+    Write-Host "    removed obsolete ~/.claude/commands/teams.md (superseded by the skill)"
+}
 
 Write-Host "==> Preparing .env"
 if (-not (Test-Path "$RepoDir\.env")) {

@@ -14,13 +14,33 @@ echo "==> Creating virtual environment (.venv)"
 "$REPO_DIR/.venv/bin/pip" install --quiet --upgrade pip
 "$REPO_DIR/.venv/bin/pip" install --quiet -r "$REPO_DIR/requirements.txt"
 
-echo "==> Installing the /teams slash command"
-CMD_DIR="$HOME/.claude/commands"
-mkdir -p "$CMD_DIR"
-VENV_PY="$REPO_DIR/.venv/bin/python"
-SCRIPT="$REPO_DIR/src/teams_notify.py"
-sed -e "s|__VENV_PY__|$VENV_PY|g" -e "s|__SCRIPT__|$SCRIPT|g" \
-    "$REPO_DIR/commands/teams.md" > "$CMD_DIR/teams.md"
+echo "==> Installing the 'teams' command on PATH"
+BIN_DIR="$HOME/.local/bin"
+mkdir -p "$BIN_DIR"
+chmod +x "$REPO_DIR/bin/teams"
+ln -sfn "$REPO_DIR/bin/teams" "$BIN_DIR/teams"
+case ":$PATH:" in
+    *":$BIN_DIR:"*) ;;
+    *) echo "    [warn] $BIN_DIR is not on PATH — add it to your shell profile" ;;
+esac
+
+echo "==> Installing the global /teams skill"
+# Symlinked, not rendered: bin/teams resolves its own location, so SKILL.md carries no
+# machine-specific paths and the live skill IS the committed file. `git pull` is therefore
+# enough to update it, and the two can never drift.
+SKILL_DIR="$HOME/.claude/skills"
+mkdir -p "$SKILL_DIR"
+if [ -e "$SKILL_DIR/teams" ] && [ ! -L "$SKILL_DIR/teams" ]; then
+    echo "    [warn] $SKILL_DIR/teams exists and is not a symlink — leaving it alone"
+else
+    ln -sfn "$REPO_DIR/skills/teams" "$SKILL_DIR/teams"
+fi
+
+# Retire the pre-symlink slash command; two entries named 'teams' would shadow each other.
+if [ -e "$HOME/.claude/commands/teams.md" ]; then
+    rm -f "$HOME/.claude/commands/teams.md"
+    echo "    removed obsolete ~/.claude/commands/teams.md (superseded by the skill)"
+fi
 
 echo "==> Preparing .env"
 if [ ! -f "$REPO_DIR/.env" ]; then
@@ -35,6 +55,10 @@ cat <<EOF
 
 Done. Next:
   1. Edit $REPO_DIR/.env with your Teams webhook + Graph app values.
-  2. Test:  $VENV_PY $SCRIPT --target channel --title "Install check" --status success
-  3. In Claude Code (any project):  /teams channel "Install check" success
+  2. Test (sends nothing):  teams --target list-people
+  3. In Claude Code, any project:  /teams channel "Install check" success
+
+The skill is SYMLINKED from $REPO_DIR/skills/teams, so 'git pull' updates it with no
+reinstall. Re-run this installer only after changing bin/, the venv, or the repo path.
+Restart Claude Code to pick up a newly installed skill.
 EOF

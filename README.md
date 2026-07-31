@@ -14,7 +14,9 @@ git clone git@github.com:Abe-AugentisAI/ms-teams-notify.git ~/teams-notify && ba
 git clone git@github.com:Abe-AugentisAI/ms-teams-notify.git $HOME\teams-notify; & $HOME\teams-notify\install.ps1
 ```
 
-The installer creates an isolated `.venv`, installs dependencies, and drops a path-resolved `/teams` command into `~/.claude/commands/`. Requires `git` and Python 3.
+The installer creates an isolated `.venv`, puts a `teams` command on your `PATH`, and links the `/teams` skill into `~/.claude/skills/` so it is available in **every** project. Requires `git` and Python 3.
+
+The skill is **symlinked** to `skills/teams/` in this repo, so `git pull` updates it with no reinstall — the live skill and the committed file are the same file and cannot drift. (Windows copies instead, since symlinks need Developer Mode; re-run `install.ps1` after a pull.)
 
 ## Configure (one-time)
 
@@ -115,4 +117,4 @@ Aliases live in `~/.config/teams-notify/aliases.json` (user-level, not committed
   local-part, a whole first/last name) and only falls back to substring, so `Chris` will
   not be swallowed by `Christa`. First names are ambiguous often in a real tenant — on more
   than one match the tool prints the candidates with their addresses and **sends nothing**.
-- To scope `/teams` to a single repo instead of globally, copy `commands/teams.md` into that project's `.claude/commands/` and point it at the repo's `.venv`.
+- **Do not copy the skill into a project's `.claude/`.** It is deliberately global — one entry in `~/.claude/skills/teams`, live in every project. A project-local `.claude/skills/teams/` or `.claude/commands/teams.md` would shadow it, and you would be editing a stale fork.
