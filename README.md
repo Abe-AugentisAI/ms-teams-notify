@@ -103,9 +103,11 @@ Aliases live in `~/.config/teams-notify/aliases.json` (user-level, not committed
 - **`--mention` is the only way to actually notify someone.** A Teams @-mention needs both
   an `<at id="N">` tag in the message body *and* a matching entry in the Graph `mentions`
   array carrying the person's AAD object id — plain "@Name" text pings nobody. So an
-  unresolvable name is a hard error that lists the chat roster rather than a silent no-op.
-  It works on `chat:`/`group:` targets only (including an alias that expands to one) and is
-  rejected on `channel` and on 1:1 DMs; the person must already be in the chat.
+  unresolvable name is a hard error that lists the chat roster rather than a silent no-op —
+  and so is an *ambiguous* one, since picking the first of two same-named members would
+  notify the wrong person while reporting success. It works on `chat:`/`group:` targets only
+  (including an alias that expands to one) and is rejected on `channel` and on `user:`
+  targets; the person must already be in the chat.
 - **Name lookup (`user:<name>`) resolves against people in your existing chats**, not the
   directory — a directory search would need `User.ReadBasic.All`, an extra admin-consented
   permission and a forced re-login. Someone you share no chat with must be addressed by

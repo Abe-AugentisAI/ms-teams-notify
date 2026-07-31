@@ -58,7 +58,11 @@ an unresolvable name as a hard error that prints the roster, never a silent no-o
 `_post_card()` then builds the prefix and the array together. `main()` rejects `--mention`
 on any target that is not `chat:`/`group:` (checked once after alias expansion, so an alias
 expanding to `user:`/`channel` is caught too) — a 1:1 DM has only two members, so
-`resolve_mentions()` would hard-exit on any third party anyway. The body prefix is
+`resolve_mentions()` would hard-exit on any third party anyway. The check is on the target
+*form*, not the chat's `chatType`: a `chat:<id>` naming a oneOnOne is still accepted, which
+is harmless (it mentions the only other member) and avoids a restriction with no safety
+value. An **ambiguous** name is a hard error too — taking the first of two same-named
+members would notify the wrong person and still report success. The body prefix is
 `html.escape()`d because the body is `contentType: html`; `mentionText` stays plain.
 
 **Why name lookup reads chat members, not the directory.** `/users?$search=` needs

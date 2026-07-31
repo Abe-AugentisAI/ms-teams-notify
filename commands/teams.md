@@ -44,10 +44,11 @@ Steps:
    - `--link "Label=https://..."`: repeatable. Include any GitHub PRs, issues, or files
      relevant to the message. If the user referenced a PR/issue/commit, build the URL.
    - `--mention "<name>"`: repeatable. Genuinely @-mention someone so Teams notifies them.
-     **`chat:`/`group:` targets only** — rejected with an error on `channel` and on 1:1
-     DMs (a DM already notifies its recipient). The person must already be a member of
-     that chat; matching accepts display name, email, or first name. An unresolvable name
-     is a hard error that prints the chat roster and sends nothing. Use this whenever the
+     **`chat:`/`group:` targets only** — rejected on `channel` and on `user:` targets (a
+     DM already notifies its recipient). The person must already be a member of that
+     chat; matching accepts display name, email, or first name. A name that matches
+     nobody — or more than one member — is a hard error that prints the candidates and
+     sends nothing, so never guess between them. Use this whenever the
      user asks to ping/notify/tag someone — writing "@Name" into `--text` renders as
      plain text and notifies **nobody**.
 

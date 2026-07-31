@@ -213,16 +213,25 @@ def resolve_mentions(token, chat_id, wanted):
         if not needle:
             unknown.append(want)
             continue
-        hit = next(
-            (m for m in members
-             if needle == (m.get("displayName") or "").lower()
-             or needle == (m.get("email") or "").lower()
-             or needle == (m.get("email") or "").split("@")[0].lower()
-             or needle in (m.get("displayName") or "").lower().split()),
-            None,
-        )
-        if hit:
-            resolved.append(hit)
+        matches = [
+            m for m in members
+            if needle == (m.get("displayName") or "").lower()
+            or needle == (m.get("email") or "").lower()
+            or needle == (m.get("email") or "").split("@")[0].lower()
+            or needle in (m.get("displayName") or "").lower().split()
+        ]
+        if len(matches) > 1:
+            # Taking the first match would notify the wrong person and still report
+            # success — the same silent-wrong-answer this function exists to prevent.
+            cands = "\n".join(
+                f"    {m.get('displayName')}  <{m.get('email') or 'no-email'}>" for m in matches
+            )
+            sys.exit(
+                f"[error] '{want}' matches {len(matches)} members of this chat — "
+                f"use a full name or address:\n{cands}"
+            )
+        if matches:
+            resolved.append(matches[0])
         else:
             unknown.append(want)
     if unknown:
@@ -564,13 +573,14 @@ def main():
         if re.match(r"[^@]+@[^@]+\.[^@]+", who):
             send_dm(card, who)
         else:
-            # Not an address — resolve the name, then bind by address when there is
-            # one. Among several object ids for one human there is no reliable way to
-            # tell which is live; the address is the identity they actually publish.
-            # Object id is the fallback for members Graph exposes without an address.
+            # Not an address — resolve the name, then bind by AAD object id. Graph
+            # /users({key}) accepts an object id or a userPrincipalName but NOT a mail
+            # address, and a chat member's `email` is often an SMTP alias that differs
+            # from their UPN (routinely so for guests) — binding by it would 404 after
+            # the name had already resolved. The address is for display only.
             person = resolve_person(who)
-            ref = person["email"] or person["userId"]
-            send_dm(card, ref, label=f"{person['displayName']} <{ref}>")
+            shown = person["email"] or person["displayName"] or person["userId"]
+            send_dm(card, person["userId"], label=f"{person['displayName']} <{shown}>")
     elif args.target.startswith("chat:"):
         chat_id = args.target.split("chat:", 1)[1].strip()
         if not chat_id:
