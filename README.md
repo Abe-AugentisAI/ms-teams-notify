@@ -37,6 +37,7 @@ Edit the `.env` the installer created in the repo root:
 ```
 /teams channel "The nightly verify loop passed on staging" success
 /teams user:jordan@example.com "Wave 6 PDF export shipped" info
+/teams user:Jordan "Wave 6 PDF export shipped" info
 /teams group:Team Stand-Up "Nightly build is green" success
 ```
 
@@ -46,9 +47,11 @@ Edit the `.env` the installer created in the repo root:
 |---|---|---|
 | `channel` | The team channel wired to the webhook | `TEAMS_WEBHOOK_URL` |
 | `user:<upn>` | A 1:1 direct message, sent as you | Graph app |
+| `user:<name>` | The same DM, by display/first name (errors if ambiguous) | Graph app |
 | `chat:<id>` | An existing group or **meeting** chat, by its Graph chat id | Graph app |
 | `group:<topic>` | A group/meeting chat resolved by name (errors if ambiguous) | Graph app |
 | `list-chats` | Prints your group/meeting chats + ids for discovery (sends nothing) | Graph app |
+| `list-people` | Prints people + the `user:` target that reaches each (sends nothing) | Graph app |
 
 Direct CLI:
 ```bash
@@ -103,4 +106,11 @@ Aliases live in `~/.config/teams-notify/aliases.json` (user-level, not committed
   unresolvable name is a hard error that lists the chat roster rather than a silent no-op.
   It works on `chat:`/`group:` targets only (including an alias that expands to one) and is
   rejected on `channel` and on 1:1 DMs; the person must already be in the chat.
+- **Name lookup (`user:<name>`) resolves against people in your existing chats**, not the
+  directory — a directory search would need `User.ReadBasic.All`, an extra admin-consented
+  permission and a forced re-login. Someone you share no chat with must be addressed by
+  full `user:<upn>`. Matching tries exact forms first (full name, address, address
+  local-part, a whole first/last name) and only falls back to substring, so `Chris` will
+  not be swallowed by `Christa`. First names are ambiguous often in a real tenant — on more
+  than one match the tool prints the candidates with their addresses and **sends nothing**.
 - To scope `/teams` to a single repo instead of globally, copy `commands/teams.md` into that project's `.claude/commands/` and point it at the repo's `.venv`.

@@ -35,7 +35,7 @@ import teams_notify as t
 name, target = sys.argv[2], sys.argv[3]
 
 # Guard: don't let a nickname collide with a built-in target form.
-_reserved = {t._norm_alias(x) for x in ("channel", "list-chats", "alias-list")}
+_reserved = {t._norm_alias(x) for x in ("channel", "list-chats", "list-people", "alias-list")}
 if ":" in name or t._norm_alias(name) in _reserved:
     sys.exit(f"[error] '{name}' is reserved — pick a different nickname.")
 

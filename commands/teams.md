@@ -1,6 +1,6 @@
 ---
 description: Post a status/message with GitHub links to a Teams channel, a colleague's DM, or a group/meeting chat.
-argument-hint: <channel|user:upn|chat:id|group:topic> "<title>" [status] [notes...]
+argument-hint: <channel|user:upn|user:name|chat:id|group:topic> "<title>" [status] [notes...]
 allowed-tools: Bash(__VENV_PY__ __SCRIPT__:*)
 ---
 
@@ -13,6 +13,12 @@ Steps:
    - `--target`: pick the destination —
      - `channel` — the team channel wired to the webhook. Default if unspecified.
      - `user:<upn>` — a 1:1 direct message (e.g. `user:jordan@example.com`).
+     - `user:<name>` — the same 1:1 DM, addressed by display name or first name
+       (e.g. `user:Jordan`). Resolved against people in your existing chats. First
+       names are frequently ambiguous in a real tenant; when more than one person
+       matches, the tool lists them with their addresses and sends nothing — pass
+       one of the listed `user:<upn>` values instead. Never guess which candidate
+       was meant; ask.
      - `chat:<id>` — an existing group or meeting chat, addressed by its Graph chat id
        (e.g. `chat:19:meeting_...@thread.v2`).
      - `group:<topic>` — a group or meeting chat resolved by its name/topic
@@ -24,6 +30,11 @@ Steps:
        Run `__VENV_PY__ __SCRIPT__ --target alias-list` to see the saved nicknames.
      - To discover the available chat ids and topics, run `__VENV_PY__ __SCRIPT__ --target list-chats`
        (no message is sent) and pick the right `chat:<id>`.
+     - To discover who is addressable by name, run `__VENV_PY__ __SCRIPT__ --target list-people`
+       (no message is sent). It prints each person's display name and the `user:` target
+       that reaches them — their address where Graph exposes one, otherwise their display
+       name. Anyone shown as *not addressable by name* cannot be reached this way at all.
+       Every printed `user:` value is usable verbatim as a `--target`.
    - `--title`: a **declarative, full-sentence** title (assertion-evidence style),
      e.g. "The nightly verify loop passed on staging" — not a topic fragment.
    - `--status`: one of `success | warn | fail | info`. Infer from context

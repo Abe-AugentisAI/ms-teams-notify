@@ -33,16 +33,22 @@ There is no server and no build step. The entry point is a single Python script.
 
 - `channel` — the channel wired to `TEAMS_WEBHOOK_URL`.
 - `user:<upn>` — a 1:1 DM (creates/reuses a oneOnOne chat), sent as the signed-in user.
+- `user:<name>` — the same DM by display/first name, resolved against chat members;
+  errors and lists candidates with their addresses if ambiguous.
 - `chat:<id>` — post to any existing chat by its Graph id (group, **meeting**, or 1:1).
 - `group:<topic>` — resolve a group/meeting chat by topic (case-insensitive substring);
   errors and lists candidates if the name is ambiguous.
 - `list-chats` — print the user's group/meeting chats + ids; sends nothing.
+- `list-people` — print people + the `user:` target that reaches each (address where known,
+  display name otherwise); members Graph exposes with neither are flagged as not
+  addressable. Sends nothing.
 - `<nickname>` — a saved alias that expands to any of the above (see **Aliases** below).
 - `alias-list` — print saved aliases; sends nothing.
 
 Shared internals: `_post_card()` posts a card to a chat id; `_iter_chats()` pages
 `/me/chats`; `_resolve_chat_by_topic()` backs `group:`; `_resolve_alias()` / `_norm_alias()`
-back nicknames; `resolve_mentions()` backs `--mention`.
+back nicknames. `_iter_people()` / `_match_people()` / `resolve_person()` back `user:<name>`;
+`resolve_mentions()` backs `--mention`.
 
 **`--mention` (chat/group only).** A Teams @-mention notifies someone only when the message
 carries BOTH an `<at id="N">` tag in the HTML body AND a matching entry in the Graph
@@ -55,13 +61,26 @@ expanding to `user:`/`channel` is caught too) — a 1:1 DM has only two members,
 `resolve_mentions()` would hard-exit on any third party anyway. The body prefix is
 `html.escape()`d because the body is `contentType: html`; `mentionText` stays plain.
 
+**Why name lookup reads chat members, not the directory.** `/users?$search=` needs
+`User.ReadBasic.All`; the app holds only `User.Read` (own profile). Adding it means a new
+Entra permission, fresh admin consent, and a re-login, because the cached token would not
+carry the scope. Chat membership is already readable under `Chat.ReadWrite`, and the people
+you DM are people you share a chat with — so `_iter_people()` builds the roster from
+`_iter_chats()` members. It collapses records on the email address: one human can hold
+several AAD object ids (tenant member in one chat, federated guest in another), and without
+that the ambiguity error prints the same address twice and cannot be acted on. For the same
+reason a name-resolved DM binds by **address** when there is one (object id only as the
+fallback for members Graph exposes without an address) — among duplicate object ids there
+is no reliable way to tell which is live.
+
 ## Aliases (nicknames)
 
 Short-form target names live in `~/.config/teams-notify/aliases.json` (user-level, **not
 committed** — keeps internal chat topics/ids out of git). Before dispatch,
 `teams_notify.py` expands a bareword target via `_resolve_alias()` (normalized by
 `_norm_alias()`, so case/space/punctuation don't matter); explicit forms
-(`channel`/`user:`/`chat:`/`group:`/`list-chats`) are never shadowed. `--target alias-list`
+(`channel`/`user:`/`chat:`/`group:`/`list-chats`/`list-people`/`alias-list`) are never
+shadowed. `--target alias-list`
 prints them. `alias.sh` (`list`/`add`/`rm`) edits the JSON and reuses
 `_resolve_chat_by_topic()`, so `add <name> <topic>` pins the resolved `chat:<id>`. Alias
 values are always full targets.
@@ -88,7 +107,7 @@ do not expect a non-interactive shell to complete it on the first run.
 ```bash
 bash verify.sh            # toolchain + webhook reachability + Graph token; POSTS NOTHING
 bash verify.sh --send     # + one labeled test card to the channel
-bash verify.sh --dm <upn> # + one labeled test DM
+bash verify.sh --dm <upn|name>    # + one labeled test DM
 bash verify.sh --chat <id|topic>  # + one labeled test to a group/meeting chat
 bash verify.sh --list     # print group/meeting chat ids (sends nothing) and exit
 ```

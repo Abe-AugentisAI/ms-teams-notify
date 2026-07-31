@@ -2,7 +2,7 @@
 # verify.sh — sanity-check the delivery paths.
 #   bash verify.sh                reachability + token acquisition only (posts nothing)
 #   bash verify.sh --send         also POST a labeled test card to the channel (visible)
-#   bash verify.sh --dm <upn>     also send a labeled test DM to <upn> (visible to them)
+#   bash verify.sh --dm <upn|name>  also send a labeled test DM (visible to them)
 #   bash verify.sh --chat <t>     also post a labeled test to a group/meeting chat, where
 #                                 <t> is a chat id ('19:...@thread.v2') or a topic name
 #   bash verify.sh --list         list your group/meeting chats + ids (posts nothing) and exit
@@ -103,7 +103,7 @@ PY
     if [ -n "$DM" ]; then
         if "$VENV_PY" "$SCRIPT" --target "user:$DM" --status info \
             --title "teams-notify verification — safe to ignore" \
-            --text "Automated DM test from verify.sh." >/dev/null 2>&1; then
+            --text "Automated DM test from verify.sh." >/dev/null; then
             ok "test DM sent to $DM"
         else
             no "test DM to $DM failed"

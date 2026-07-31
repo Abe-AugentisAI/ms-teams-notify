@@ -298,7 +298,103 @@ def _resolve_chat_by_topic(token, topic):
     return hits
 
 
-def send_dm(card, upn):
+def _iter_people(token):
+    """Return everyone visible in the signed-in user's chats, keyed by AAD object id.
+
+    Chat membership is readable under the `Chat.ReadWrite` scope this tool already
+    holds. A directory-wide `/users` search would need `User.ReadBasic.All` — a new
+    admin-consented permission and a forced re-login — so the roster is built from
+    chat members instead. The trade-off: people you share no chat with are not
+    resolvable by name, and still need an explicit `user:<upn>`.
+    """
+    people = {}
+    for chat in _iter_chats(token):
+        for m in chat.get("members", []):
+            uid = m.get("userId")
+            if not uid:
+                continue  # anonymous/federated members carry no AAD id
+            email = (m.get("email") or "").strip()
+            # One human can hold several AAD object ids — a tenant member in one chat
+            # and a federated guest in another — so collapse on the address when there
+            # is one. Keying on userId alone would list the same person several times
+            # under one address, making the "use an exact address" hint unactionable.
+            key = email.lower() or uid
+            person = people.setdefault(key, {"userId": uid, "displayName": "", "email": email})
+            person["displayName"] = person["displayName"] or (m.get("displayName") or "")
+    return people
+
+
+def _match_people(people, needle):
+    """Match `needle` against people — exact forms first, substring only as fallback.
+
+    Tiering keeps a full first-name hit ("Jordan") from being drowned by unrelated
+    substring matches. The exact forms mirror resolve_mentions() so `--mention`
+    and `user:<name>` accept the same spellings.
+    """
+    n = needle.strip().lstrip("@").lower()
+    exact = [
+        p for p in people
+        if n == (p["displayName"] or "").lower()
+        or n == (p["email"] or "").lower()
+        or n == (p["email"] or "").split("@")[0].lower()
+        or n in (p["displayName"] or "").lower().split()
+    ]
+    if exact:
+        return exact
+    return [p for p in people if n in (p["displayName"] or "").lower()]
+
+
+def _person_target(person):
+    """The `user:<...>` value that resolves back to this person, or None if none does.
+
+    An AAD object id is deliberately NOT offered: main() routes `user:<x>` straight to
+    send_dm() only when x is an address, and _match_people() compares names and addresses
+    only — so an object id printed as a suggested target can never be matched back, and
+    printing one hands the reader a value the CLI will reject.
+    """
+    return person["email"] or person["displayName"] or None
+
+
+def resolve_person(name):
+    """Resolve a display/first name to exactly one person, or exit with guidance."""
+    token = _graph_token()
+    hits = _match_people(list(_iter_people(token).values()), name)
+    if not hits:
+        sys.exit(
+            f"[error] no one matching '{name}' in your chats. Name lookup only sees people "
+            f"you share a chat with — use --target user:<upn> with their full address, or run "
+            f"--target list-people to see who is resolvable."
+        )
+    if len(hits) > 1:
+        listing = "\n".join(
+            f"    user:{_person_target(p) or p['userId']}  ({p['displayName'] or 'no name'})"
+            for p in sorted(hits, key=lambda p: (p["displayName"] or "").lower())
+        )
+        sys.exit(f"[error] '{name}' matched {len(hits)} people — narrow it with one of these:\n{listing}")
+    return hits[0]
+
+
+def list_people():
+    """Print everyone resolvable by name from the signed-in user's chats; sends nothing."""
+    token = _graph_token()
+    people = sorted(_iter_people(token).values(), key=lambda p: (p["displayName"] or "").lower())
+    unreachable = 0
+    for p in people:
+        print(p["displayName"] or "(no name)")
+        ref = _person_target(p)
+        if ref:
+            print(f"    user:{ref}")
+        else:
+            unreachable += 1
+            print("    (not addressable by name — Graph exposes no address or display name)")
+    note = f"\n{len(people)} people across your chats."
+    if unreachable:
+        note += f" {unreachable} not addressable by name."
+    print(note, file=sys.stderr)
+
+
+def send_dm(card, user_ref, label=None):
+    """DM a user by UPN/email or AAD object id — both are valid in a user@odata.bind."""
     token = _graph_token()
     me = _graph("GET", "/me", token)["id"]
 
@@ -311,12 +407,12 @@ def send_dm(card, upn):
              "user@odata.bind": f"{GRAPH}/users('{me}')"},
             {"@odata.type": "#microsoft.graph.aadUserConversationMember",
              "roles": ["owner"],
-             "user@odata.bind": f"{GRAPH}/users('{upn}')"},
+             "user@odata.bind": f"{GRAPH}/users('{user_ref}')"},
         ],
     })
 
     _post_card(token, chat["id"], card)
-    print(f"[ok] sent DM to {upn}.")
+    print(f"[ok] sent DM to {label or user_ref}.")
 
 
 def send_chat(card, chat_id, mention=None):
@@ -406,8 +502,9 @@ def print_aliases():
 def main():
     p = argparse.ArgumentParser(description="Post a message to Teams (channel, DM, or group/meeting chat).")
     p.add_argument("--target", required=True,
-                   help="'channel', 'user:<upn>' (1:1 DM), 'chat:<id>' or 'group:<topic>' "
-                        "(group/meeting chat), a saved alias/nickname, 'alias-list', or 'list-chats'")
+                   help="'channel', 'user:<upn|name>' (1:1 DM — a name is resolved against "
+                        "people in your chats), 'chat:<id>' or 'group:<topic>' (group/meeting "
+                        "chat), a saved alias/nickname, 'alias-list', 'list-chats', or 'list-people'")
     p.add_argument("--card-file", dest="card_file",
                    help="Path to a pre-built Adaptive Card JSON, or '-' for stdin. "
                         "When set, build flags below are ignored.")
@@ -423,7 +520,7 @@ def main():
     args = p.parse_args()
 
     # Expand a short-form alias unless the target is already an explicit form.
-    if (args.target not in ("channel", "list-chats", "alias-list")
+    if (args.target not in ("channel", "list-chats", "list-people", "alias-list")
             and not args.target.startswith(("user:", "chat:", "group:"))):
         args.target = _resolve_alias(args.target)
 
@@ -442,6 +539,9 @@ def main():
     if args.target == "list-chats":
         list_chats()
         return
+    if args.target == "list-people":
+        list_people()
+        return
 
     if args.card_file:
         if any([args.title, args.text, args.link, args.fact]) or args.status != "info":
@@ -456,10 +556,21 @@ def main():
     if args.target == "channel":
         send_channel(card)
     elif args.target.startswith("user:"):
-        upn = args.target.split("user:", 1)[1].strip()
-        if not re.match(r"[^@]+@[^@]+\.[^@]+", upn):
-            sys.exit(f"[error] '{upn}' does not look like a UPN/email.")
-        send_dm(card, upn)
+        # Strip a leading @ here too, so an all-@ target cannot survive as the empty
+        # needle that _match_people() would match against everyone.
+        who = args.target.split("user:", 1)[1].strip().lstrip("@").strip()
+        if not who:
+            sys.exit("[error] --target user:<upn|name> requires a person (see --target list-people).")
+        if re.match(r"[^@]+@[^@]+\.[^@]+", who):
+            send_dm(card, who)
+        else:
+            # Not an address — resolve the name, then bind by address when there is
+            # one. Among several object ids for one human there is no reliable way to
+            # tell which is live; the address is the identity they actually publish.
+            # Object id is the fallback for members Graph exposes without an address.
+            person = resolve_person(who)
+            ref = person["email"] or person["userId"]
+            send_dm(card, ref, label=f"{person['displayName']} <{ref}>")
     elif args.target.startswith("chat:"):
         chat_id = args.target.split("chat:", 1)[1].strip()
         if not chat_id:
@@ -471,8 +582,9 @@ def main():
             sys.exit("[error] --target group:<topic> requires a topic (see --target list-chats).")
         send_group(card, topic, args.mention)
     else:
-        sys.exit(f"[error] unknown target '{args.target}'. Use channel | user:<upn> | chat:<id> | "
-                 f"group:<topic> | a saved alias (see --target alias-list) | list-chats.")
+        sys.exit(f"[error] unknown target '{args.target}'. Use channel | user:<upn|name> | "
+                 f"chat:<id> | group:<topic> | a saved alias (see --target alias-list) | "
+                 f"list-chats | list-people.")
 
 
 if __name__ == "__main__":
