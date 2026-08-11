@@ -36,6 +36,18 @@ else
     ln -sfn "$REPO_DIR/skills/teams" "$SKILL_DIR/teams"
 fi
 
+echo "==> Installing the cross-agent skill (~/.agents/skills)"
+# ~/.agents/skills is the agentskills.io cross-client convention, read by Codex,
+# Antigravity, Gemini CLI, Cursor, Copilot, Amp, Goose, and others. Those hosts honor
+# only name/description frontmatter — Claude-specific fields are ignored harmlessly.
+AGENTS_SKILL_DIR="$HOME/.agents/skills"
+mkdir -p "$AGENTS_SKILL_DIR"
+if [ -e "$AGENTS_SKILL_DIR/teams" ] && [ ! -L "$AGENTS_SKILL_DIR/teams" ]; then
+    echo "    [warn] $AGENTS_SKILL_DIR/teams exists and is not a symlink — leaving it alone"
+else
+    ln -sfn "$REPO_DIR/skills/teams" "$AGENTS_SKILL_DIR/teams"
+fi
+
 # Retire the pre-symlink slash command; two entries named 'teams' would shadow each other.
 if [ -e "$HOME/.claude/commands/teams.md" ]; then
     rm -f "$HOME/.claude/commands/teams.md"
