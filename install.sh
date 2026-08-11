@@ -48,6 +48,17 @@ else
     ln -sfn "$REPO_DIR/skills/teams" "$AGENTS_SKILL_DIR/teams"
 fi
 
+echo "==> Installing the Antigravity skill (~/.gemini/config/skills)"
+# Antigravity reads .agents/skills only at workspace level; its global path — the one
+# shared by AGY, the agy CLI, and the IDE — is ~/.gemini/config/skills.
+GEMINI_SKILL_DIR="$HOME/.gemini/config/skills"
+mkdir -p "$GEMINI_SKILL_DIR"
+if [ -e "$GEMINI_SKILL_DIR/teams" ] && [ ! -L "$GEMINI_SKILL_DIR/teams" ]; then
+    echo "    [warn] $GEMINI_SKILL_DIR/teams exists and is not a symlink — leaving it alone"
+else
+    ln -sfn "$REPO_DIR/skills/teams" "$GEMINI_SKILL_DIR/teams"
+fi
+
 # Retire the pre-symlink slash command; two entries named 'teams' would shadow each other.
 if [ -e "$HOME/.claude/commands/teams.md" ]; then
     rm -f "$HOME/.claude/commands/teams.md"
