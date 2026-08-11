@@ -372,6 +372,7 @@ def _post_card(token, chat_id, card, mention_members=None):
 def _iter_chats(token):
     """Yield every chat for the signed-in user, following @odata.nextLink paging."""
     next_link = f"{GRAPH}/me/chats?$expand=members&$top=50"
+    scanned = 0
     while next_link:
         resp = requests.get(next_link, headers={"Authorization": f"Bearer {token}"}, timeout=30)
         if resp.status_code >= 300:
@@ -379,7 +380,13 @@ def _iter_chats(token):
         data = resp.json()
         for chat in data.get("value", []):
             yield chat
+        scanned += len(data.get("value", []))
         next_link = data.get("@odata.nextLink")
+        # Liveness, not chrome: agent task managers (Antigravity, Codex) kill silent
+        # long-running commands and retry, restarting this whole walk. One line per page
+        # keeps them patient; single-page rosters stay silent.
+        if next_link:
+            print(f"[scan] {scanned} chats scanned…", file=sys.stderr, flush=True)
 
 
 def _resolve_chat_by_topic(token, topic):

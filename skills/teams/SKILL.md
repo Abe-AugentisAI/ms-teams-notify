@@ -64,6 +64,11 @@ someone you share no chat with needs their full `user:<upn>`. First names are fr
 ambiguous in a real tenant; on more than one match the tool prints the candidates and sends
 nothing. Pass one of the printed values verbatim. `group:<topic>` behaves the same way.
 
+Name/topic resolution, `list-people`, and `list-chats` walk every chat through paginated
+Graph calls — expect **30–120 s**, with `[scan] N chats scanned…` progress on stderr. Wait
+for completion; **never kill and re-run a slow `teams` command** — each retry restarts the
+full walk from zero. `user:<upn>` and `chat:<id>` targets skip the walk and are fast.
+
 ## Composing
 
 - `--title` — a **declarative, full-sentence** assertion, e.g. "The nightly-build verify loop
