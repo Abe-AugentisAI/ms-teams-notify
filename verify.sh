@@ -142,6 +142,17 @@ else
     no "skill not installed at $SKILL_LINK — run install.sh"
 fi
 [ -f "$SKILL_LINK/SKILL.md" ] && ok "SKILL.md reachable" || no "SKILL.md missing at $SKILL_LINK"
+# Cross-agent installs: install.sh creates both unconditionally, so absence means the
+# installer has not been re-run since they were added.
+for XLINK in "$HOME/.agents/skills/teams" "$HOME/.gemini/config/skills/teams"; do
+    if [ -L "$XLINK" ] && [ "$(readlink -f "$XLINK")" = "$REPO_DIR/skills/teams" ]; then
+        ok "cross-agent skill symlinked at $XLINK"
+    elif [ -d "$XLINK" ]; then
+        ok "cross-agent skill installed as a copy at $XLINK (re-run the installer after a pull)"
+    else
+        no "cross-agent skill missing at $XLINK — run install.sh"
+    fi
+done
 if [ -e "$HOME/.claude/commands/teams.md" ]; then
     no "obsolete ~/.claude/commands/teams.md still present — it shadows the skill; run install.sh"
 else

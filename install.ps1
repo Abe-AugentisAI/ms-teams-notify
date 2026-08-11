@@ -35,6 +35,20 @@ $SkillDir = "$HOME\.claude\skills\teams"
 New-Item -ItemType Directory -Force -Path $SkillDir | Out-Null
 Copy-Item "$RepoDir\skills\teams\SKILL.md" "$SkillDir\SKILL.md" -Force
 
+Write-Host "==> Installing the cross-agent skill (~\.agents\skills)"
+# agentskills.io cross-client convention — read by Codex, Gemini CLI, Cursor, Copilot,
+# Amp, Goose, and others. Copied, same as the Claude install above.
+$AgentsSkillDir = "$HOME\.agents\skills\teams"
+New-Item -ItemType Directory -Force -Path $AgentsSkillDir | Out-Null
+Copy-Item "$RepoDir\skills\teams\SKILL.md" "$AgentsSkillDir\SKILL.md" -Force
+
+Write-Host "==> Installing the Antigravity skill (~\.gemini\config\skills)"
+# Antigravity's global skills path, mirrored from the documented POSIX location
+# (~/.gemini/config/skills); its .agents/skills support is workspace-level only.
+$GeminiSkillDir = "$HOME\.gemini\config\skills\teams"
+New-Item -ItemType Directory -Force -Path $GeminiSkillDir | Out-Null
+Copy-Item "$RepoDir\skills\teams\SKILL.md" "$GeminiSkillDir\SKILL.md" -Force
+
 # Retire the pre-symlink slash command; two entries named 'teams' would shadow each other.
 if (Test-Path "$HOME\.claude\commands\teams.md") {
     Remove-Item "$HOME\.claude\commands\teams.md" -Force

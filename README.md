@@ -14,9 +14,20 @@ git clone git@github.com:Abe-AugentisAI/ms-teams-notify.git ~/teams-notify && ba
 git clone git@github.com:Abe-AugentisAI/ms-teams-notify.git $HOME\teams-notify; & $HOME\teams-notify\install.ps1
 ```
 
-The installer creates an isolated `.venv`, puts a `teams` command on your `PATH`, and links the `/teams` skill into `~/.claude/skills/` so it is available in **every** project. Requires `git` and Python 3.
+The installer creates an isolated `.venv`, puts a `teams` command on your `PATH`, and links the skill into three locations so it is available in **every** project and **every** agent: `~/.claude/skills/` (Claude Code), `~/.agents/skills/` (the [agentskills.io](https://agentskills.io) convention — Codex, Gemini CLI, Cursor, Copilot, Amp, Goose, …), and `~/.gemini/config/skills/` (Antigravity). Requires `git` and Python 3.
 
 The skill is **symlinked** to `skills/teams/` in this repo, so `git pull` updates it with no reinstall — the live skill and the committed file are the same file and cannot drift. (Windows copies instead, since symlinks need Developer Mode; re-run `install.ps1` after a pull.)
+
+## Porting to a new machine
+
+Everything durable rides this git repo; only three things do not, and each takes a minute:
+
+1. **Clone + install** — the one-liner above. Re-creates the venv, PATH entry, and all skill links.
+2. **Carry `.env`** — the three values are secrets and never committed; keep them in your password manager and paste into the new machine's `.env` (or run `bash configure.sh`).
+3. **Sign in once** — the first DM/chat command triggers the interactive device-code login on that machine. Do **not** copy `token_cache.json` between machines.
+4. *(Optional)* **Aliases** — copy `~/.config/teams-notify/aliases.json` from the old machine, or re-add with `alias.sh`.
+
+Then `bash verify.sh` — it asserts the toolchain, `.env`, all three skill installs, and the offline targeting tests, posting nothing.
 
 ## Configure (one-time)
 
