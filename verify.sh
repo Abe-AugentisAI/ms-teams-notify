@@ -11,6 +11,7 @@ set -uo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="$REPO_DIR/.env"
 VENV_PY="$REPO_DIR/.venv/bin/python"
+[ -x "$VENV_PY" ] || VENV_PY="$REPO_DIR/.venv/Scripts/python.exe"   # Windows venv layout
 SCRIPT="$REPO_DIR/src/teams_notify.py"
 
 SEND=0; DM=""; CHAT=""; LIST=0
@@ -29,6 +30,7 @@ pass=0; fail=0
 ok()   { echo "  ${G}PASS${N} $1"; pass=$((pass+1)); }
 no()   { echo "  ${R}FAIL${N} $1"; fail=$((fail+1)); }
 skip() { echo "  ${Y}SKIP${N} $1"; }
+phys() { (cd "$1" 2>/dev/null && pwd -P); }  # portable `readlink -f` for dirs (BSD readlink has no -f)
 
 # Load .env through the same parser teams_notify.py uses (python-dotenv), NOT bash
 # `source` — so values containing '&' or other shell metacharacters are read
@@ -67,11 +69,15 @@ else
         https://*) ok "URL is HTTPS";;
         *) no "URL is not HTTPS";;
     esac
-    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$TEAMS_WEBHOOK_URL" || true)"
-    if [ -z "$code" ] || [ "$code" = "000" ]; then
-        no "endpoint unreachable (DNS/TLS/connection failed)"
+    if ! command -v curl >/dev/null 2>&1; then
+        skip "curl not found — webhook reachability not checked"
     else
-        ok "endpoint reachable (HTTP $code; nothing posted)"
+        code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$TEAMS_WEBHOOK_URL" || true)"
+        if [ -z "$code" ] || [ "$code" = "000" ]; then
+            no "endpoint unreachable (DNS/TLS/connection failed)"
+        else
+            ok "endpoint reachable (HTTP $code; nothing posted)"
+        fi
     fi
     if [ "$SEND" = "1" ]; then
         if "$VENV_PY" "$SCRIPT" --target channel --status info \
@@ -134,7 +140,7 @@ echo
 echo "[4] Global skill install"
 # No render step to verify: the skill is a symlink, so 'in sync' is just 'points here'.
 SKILL_LINK="$HOME/.claude/skills/teams"
-if [ -L "$SKILL_LINK" ] && [ "$(readlink -f "$SKILL_LINK")" = "$REPO_DIR/skills/teams" ]; then
+if [ -L "$SKILL_LINK" ] && [ "$(phys "$SKILL_LINK")" = "$(phys "$REPO_DIR/skills/teams")" ]; then
     ok "skill symlinked to this repo (git pull is enough to update it)"
 elif [ -d "$SKILL_LINK" ]; then
     ok "skill installed as a copy (Windows-style; re-run the installer after a pull)"
@@ -145,7 +151,7 @@ fi
 # Cross-agent installs: install.sh creates both unconditionally, so absence means the
 # installer has not been re-run since they were added.
 for XLINK in "$HOME/.agents/skills/teams" "$HOME/.gemini/config/skills/teams"; do
-    if [ -L "$XLINK" ] && [ "$(readlink -f "$XLINK")" = "$REPO_DIR/skills/teams" ]; then
+    if [ -L "$XLINK" ] && [ "$(phys "$XLINK")" = "$(phys "$REPO_DIR/skills/teams")" ]; then
         ok "cross-agent skill symlinked at $XLINK"
     elif [ -d "$XLINK" ]; then
         ok "cross-agent skill installed as a copy at $XLINK (re-run the installer after a pull)"

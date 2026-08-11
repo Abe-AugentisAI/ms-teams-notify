@@ -8,6 +8,10 @@ PY="${PYTHON:-python3}"
 echo "==> teams-notify: installing from $REPO_DIR"
 
 command -v "$PY" >/dev/null 2>&1 || { echo "[error] '$PY' not found. Install Python 3."; exit 1; }
+"$PY" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)' \
+    || { echo "[error] '$PY' is older than 3.8 (python-dotenv needs >= 3.8)."; exit 1; }
+"$PY" -m ensurepip --version >/dev/null 2>&1 \
+    || { echo "[error] '$PY' cannot create venvs (ensurepip missing). Debian/Ubuntu: sudo apt-get install -y python3-venv"; exit 1; }
 
 echo "==> Creating virtual environment (.venv)"
 "$PY" -m venv "$REPO_DIR/.venv"

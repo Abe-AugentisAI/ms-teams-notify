@@ -5,13 +5,21 @@ $RepoDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Write-Host "==> teams-notify: installing from $RepoDir"
 
 $Py = "python"
-if (-not (Get-Command $Py -ErrorAction SilentlyContinue)) {
-    throw "'python' not found. Install Python 3 and re-run."
+# Get-Command alone is satisfied by the Microsoft Store's python stub, so probe a real
+# run; the same probe enforces the Python >= 3.8 floor python-dotenv requires.
+$PyOk = $false
+try {
+    & $Py -c "import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)" 2>$null
+    $PyOk = ($LASTEXITCODE -eq 0)
+} catch {}
+if (-not $PyOk) {
+    throw "'python' is missing, a Store stub, or older than 3.8. Install Python 3.8+ and re-run."
 }
 
 Write-Host "==> Creating virtual environment (.venv)"
 & $Py -m venv "$RepoDir\.venv"
 $VenvPy = "$RepoDir\.venv\Scripts\python.exe"
+$Script = "$RepoDir\src\teams_notify.py"
 & $VenvPy -m pip install --quiet --upgrade pip
 & $VenvPy -m pip install --quiet -r "$RepoDir\requirements.txt"
 
@@ -19,10 +27,17 @@ Write-Host "==> Installing the 'teams' command on PATH"
 $BinDir = "$HOME\.local\bin"
 New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
 # Windows has no usable equivalent of the bash wrapper's symlink resolution, so shim it.
+# OEM encoding, not ASCII: cmd.exe reads the OEM code page, and ASCII mangles any
+# non-ASCII characters in the profile path to '?'.
 @"
 @echo off
-"$VenvPy" "$RepoDir\src\teams_notify.py" %*
-"@ | Set-Content -Path "$BinDir\teams.cmd" -Encoding ASCII
+"$VenvPy" "$Script" %*
+"@ | Set-Content -Path "$BinDir\teams.cmd" -Encoding OEM
+# Git Bash — what Claude Code's Bash tool uses on Windows — resolves bare 'teams' to an
+# extensionless file, never to teams.cmd, and SKILL.md's allowed-tools match the bare
+# name. LF endings and forward slashes on purpose: sh chokes on CRLF shebangs.
+$ShimBody = "#!/bin/sh`nexec `"$($VenvPy -replace '\\','/')`" `"$($Script -replace '\\','/')`" `"`$@`"`n"
+[IO.File]::WriteAllText("$BinDir\teams", $ShimBody)
 if (($env:PATH -split ';') -notcontains $BinDir) {
     Write-Host "    [warn] $BinDir is not on PATH — add it"
 }

@@ -15,6 +15,7 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_PY="$REPO_DIR/.venv/bin/python"
+[ -x "$VENV_PY" ] || VENV_PY="$REPO_DIR/.venv/Scripts/python.exe"   # Windows venv layout
 SCRIPT="$REPO_DIR/src/teams_notify.py"
 
 cmd="${1:-}"; shift || true

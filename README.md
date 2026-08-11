@@ -11,8 +11,9 @@ git clone git@github.com:Abe-AugentisAI/ms-teams-notify.git ~/teams-notify && ba
 
 **Windows (PowerShell)**
 ```powershell
-git clone git@github.com:Abe-AugentisAI/ms-teams-notify.git $HOME\teams-notify; & $HOME\teams-notify\install.ps1
+git clone git@github.com:Abe-AugentisAI/ms-teams-notify.git $HOME\teams-notify; powershell -ExecutionPolicy Bypass -File $HOME\teams-notify\install.ps1
 ```
+(`-ExecutionPolicy Bypass` because a fresh Windows machine blocks unsigned scripts by default. No SSH key on the machine yet? Clone `https://github.com/Abe-AugentisAI/ms-teams-notify.git` instead.)
 
 The installer creates an isolated `.venv`, puts a `teams` command on your `PATH`, and links the skill into three locations so it is available in **every** project and **every** agent: `~/.claude/skills/` (Claude Code), `~/.agents/skills/` (the [agentskills.io](https://agentskills.io) convention — Codex, Gemini CLI, Cursor, Copilot, Amp, Goose, …), and `~/.gemini/config/skills/` (Antigravity). Requires `git` and Python 3.
 

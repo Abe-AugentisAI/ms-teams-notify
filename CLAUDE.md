@@ -154,4 +154,4 @@ Default run must stay side-effect-free: unset paths **SKIP**, nothing is posted.
 
 Python 3, isolated `.venv` created by the installer. On Debian/Ubuntu, `python3 -m venv`
 needs the `python3-venv` package (`sudo apt-get install -y python3.X-venv`); `install.sh`
-assumes it is present. Run the tool via `.venv/bin/python src/teams_notify.py …`.
+probes for it (ensurepip) and names the package when missing. Run the tool via `.venv/bin/python src/teams_notify.py …`.
