@@ -1,40 +1,44 @@
 ---
 name: teams
-description: Use when the user wants to send, post, or share something on Microsoft Teams — message, DM, or ping a colleague by name, notify or tag someone, drop an update in a group, meeting, or stand-up chat, post a build/deploy/PR/test result to the team channel, or announce that something shipped, passed, failed, or needs review. Also use to look up who or what is reachable on Teams — list people, chats, or saved nicknames. Sends real messages as the signed-in user and they cannot be unsent, so it always confirms the target and content before posting. Do not use for email (that is Outlook) or for reading Teams history.
-user-invocable: true
-argument-hint: <channel|user:upn|user:name|chat:id|group:topic|nickname> "<title>" [status] [notes...]
+description: Use when the user wants to send, post, or share something on Microsoft Teams — message, DM, or ping a colleague by name, notify or tag someone, drop an update in a group, meeting, or stand-up chat, post a build/deploy/PR/test result to the team channel, or announce that something shipped, passed, failed, or needs review. Also use to look up who or what is reachable on Teams — list people, chats, or saved nicknames. When the user explicitly asks to send and the target and intent are clear, compose and send one message immediately without a draft preview, dry run, or confirmation; ask only when the destination or material content is unclear. Do not use for email (that is Outlook) or for reading Teams history.
 allowed-tools:
-  - Bash(teams --target list-people)
-  - Bash(teams --target list-chats)
-  - Bash(teams --target alias-list)
+  - Bash(teams --target *)
+  - Bash(teams --dry-run --target *)
 ---
 
 Post a rich Adaptive Card to Microsoft Teams — a channel, a colleague's DM, or a
 group/meeting chat — via the `teams` CLI.
 
+Invocation: `<channel|user:upn|user:name|chat:id|group:topic|nickname> "<title>"
+[status] [notes...]`
+
 **Requested target and message:** $ARGUMENTS
 
-## Rule 0 — sending is irreversible
+## Rule 0 — explicit send requests are authorization
 
 Messages post **as the signed-in user** to real colleagues, and Microsoft Graph provides no
-delete: a wrong message can only be removed by hand in the Teams UI. Therefore:
+delete: a wrong message can only be removed by hand in the Teams UI. Apply these rules:
+
+- When the user explicitly asks to **send, post, share, notify, or ping**, and the target and
+  material intent are clear from the current conversation, compose the final card internally
+  and run the send command **once, immediately**. Do not present a draft, add `--dry-run`, or
+  ask for confirmation first.
+- Ask a clarifying question **before composing or sending** only when the destination or
+  material message content is genuinely unclear. Context established earlier in the
+  conversation counts; do not ask the user to repeat it.
+- If the user asks only to **draft, review, preview, or dry-run** a message, do not send it.
+  Use `--dry-run` only when the user explicitly requests a preview/dry run or when diagnosing
+  the CLI itself without posting.
 
 - **Never infer a target.** There is no default destination. If the user did not name one,
   ask. Do not fall back to `channel`.
-- **Preview with `--dry-run`, then confirm.** Adding `--dry-run` resolves the target and
-  prints the exact card without sending anything or creating a chat. Use it to show the
-  user precisely who this reaches and what they will see, then re-run the identical command
-  without the flag once they agree. Never run a send command to "check that it resolves" —
-  there is no other way to inspect a target, and the message posts.
 - **Never guess between candidates.** Ambiguous names are a hard error by design; relay the
   candidates and ask which was meant.
+- **Never duplicate an uncertain send.** After a timeout, interruption, or result that does
+  not prove whether Teams accepted the message, report the uncertainty and do not retry
+  unless the user explicitly asks.
 - The discovery targets below send nothing and need no confirmation — prefer them when the
   user is only asking *who* or *where*, not asking to post.
-
-Only the three discovery commands are pre-approved in `allowed-tools`; every send raises a
-real permission prompt. That is deliberate — it is the one machine-enforced checkpoint in
-front of an irreversible message, and it still applies in contexts that never read this
-file. Do not work around it.
 
 You cannot DM yourself: Graph has no 1:1 chat with a single member. Your own notes are
 `--target chat:48:notes` (it accepts a card but not a `--mention`).

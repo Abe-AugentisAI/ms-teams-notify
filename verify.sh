@@ -148,6 +148,13 @@ else
     no "skill not installed at $SKILL_LINK — run install.sh"
 fi
 [ -f "$SKILL_LINK/SKILL.md" ] && ok "SKILL.md reachable" || no "SKILL.md missing at $SKILL_LINK"
+if [ -f "$SKILL_LINK/SKILL.md" ]; then
+    if cmp -s "$REPO_DIR/skills/teams/SKILL.md" "$SKILL_LINK/SKILL.md"; then
+        ok "Claude skill content matches the canonical skill"
+    else
+        no "Claude skill copy is stale — re-run the installer"
+    fi
+fi
 # Cross-agent installs: install.sh creates both unconditionally, so absence means the
 # installer has not been re-run since they were added.
 for XLINK in "$HOME/.agents/skills/teams" "$HOME/.gemini/config/skills/teams"; do
@@ -157,6 +164,13 @@ for XLINK in "$HOME/.agents/skills/teams" "$HOME/.gemini/config/skills/teams"; d
         ok "cross-agent skill installed as a copy at $XLINK (re-run the installer after a pull)"
     else
         no "cross-agent skill missing at $XLINK — run install.sh"
+    fi
+    if [ -f "$XLINK/SKILL.md" ]; then
+        if cmp -s "$REPO_DIR/skills/teams/SKILL.md" "$XLINK/SKILL.md"; then
+            ok "skill content at $XLINK matches the canonical skill"
+        else
+            no "skill copy at $XLINK is stale — re-run the installer"
+        fi
     fi
 done
 if [ -e "$HOME/.claude/commands/teams.md" ]; then
